@@ -73,11 +73,9 @@
             dmin = shortest_distances(N_noeuds,Voisins)
             NoeudsProche  = Vector{Vector{Int}}()
             VoisinsProche = Vector{Vector{Vector{Int}}}()
-            ArcsProche    = Vector{Vector{Pair{Int,Int}}}()
             for k in Noeuds
                 push!(NoeudsProche, Vector{Int}())
                 push!(VoisinsProche, Vector{Vector{Int}}())
-                push!(ArcsProche, Vector{Pair{Int,Int}}())
                 for j in Noeuds
                     push!(VoisinsProche[k], Vector{Int}())
                     if dmin[k,j]<=Rmax
