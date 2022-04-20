@@ -88,7 +88,7 @@
                     end
                 end
             end
-            @variable(m, f[k in Commodites, i in NoeudsProche[k], j in Voisins[i];dmin[k,i]<=Rmax-1], Bin);
+            @variable(m, f[k in Commodites, j in NoeudsProche[k], i in VoisinsProche[j]], Bin);
         else
             @variable(m, f[Commodites,Arcs], Bin);
         end
