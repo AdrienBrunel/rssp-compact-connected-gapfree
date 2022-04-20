@@ -436,7 +436,12 @@
         Rayon_InReserve = maximum(dmin_in_reserve)/2
         println("Le rayon interne de la réserve est : Rayon = $(Rayon_InReserve)")
 
-
+        Reserve_Components = connected_components(Voisins,x_opt)
+        if length(Reserve_Components) == 1
+            println("The reserve is connected")
+        else
+            println("The reserve has $(length(Reserve_Components)) connected components")
+        end
 
         return Perimetre,Cout,Score,Rayon,Rayon_InReserve
     end
