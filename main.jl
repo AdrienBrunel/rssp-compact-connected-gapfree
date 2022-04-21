@@ -26,8 +26,8 @@ root_dir=pwd();
     println("MST_struct.jl ...");include("$(root_dir)/2_functions/MST_struct.jl");
 
     # Grille de taille Nx*Ny
-    Nx        = 2*12
-    Ny        = 2*7
+    Nx        = 12
+    Ny        = 7
     # Compacité
     beta      = 1
     # Nombre de conservation features
@@ -43,9 +43,9 @@ root_dir=pwd();
 
     # Divers
     if is_rmax
-        Rmax = 6
+        Rmax = 3
     else
-        Rmax = 18
+        Rmax = Nx + Ny
     end
 
     #folder = "24x14_CF3_BLM0.5_fromfiles"
@@ -136,9 +136,9 @@ root_dir=pwd();
     x_opt,z_opt,u_opt,r_opt    = read_info_graph_reserve(my_model,gridgraph,is_beta)
     Perimetre,Cout,Score,Rayon,Rayon_InReserve = print_info_reserve(x_opt,instance,gridgraph)
     title = "Solution_$(computation_time)s_Score$(Score)_Perimetre$(Perimetre)_Cout$(Cout)_$(is_beta)_$(is_non_reserve)_$(is_callbacks)_$(is_damier)_$(is_rmax)";
-    # if is_non_reserve
-    #     x_opt,v_opt = read_info_graph_nonreserve(my_model,gridgraph)
-    #     visualisation_reserve_nonreserve_graph(x_opt,u_opt,r_opt,v_opt,"/$(res_dir)/$(title).png",gridgraph)
-    # else
-    visualisation_reserve_graph(x_opt,u_opt,r_opt,"/$(res_dir)/$(title).png",gridgraph)
-    # end
+    if is_non_reserve
+        x_opt,v_opt = read_info_graph_nonreserve(my_model,gridgraph)
+        visualisation_reserve_nonreserve_graph(x_opt,u_opt,r_opt,v_opt,"/$(res_dir)/$(title).png",gridgraph)
+    else
+        visualisation_reserve_graph(x_opt,u_opt,r_opt,"/$(res_dir)/$(title).png",gridgraph)
+    end

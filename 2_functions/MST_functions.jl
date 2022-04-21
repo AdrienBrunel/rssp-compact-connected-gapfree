@@ -349,6 +349,7 @@
 
         # variable de sélection des noeuds de la reserve
         x_opt = round.(Int,value.(model[:x]).data)
+        push!(x_opt, 0)
         println("La non-réserve est composée des noeuds $(NoeudsFictif[x_opt[NoeudsFictif] .== 0])")
 
         # variable de sélection de la racine de l'arbre

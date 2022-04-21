@@ -19,7 +19,6 @@
         Beta                 = instance.Beta
         Rmax = params.Rmax
 
-
         if is_damier
             NoeudsNoirs  = gridgraph.NoeudsNoirs
             NoeudsBlancs = gridgraph.NoeudsBlancs
@@ -31,9 +30,6 @@
             ArcsFictif     = gridgraph.ArcsFictif
             alpha          = gridgraph.alpha
         end
-
-
-
 
         ## VARIABLE DE DECISION ------------------------------------------------
         # x : variable de sélection du noeuds j dans le graphe de la réserve
@@ -61,12 +57,12 @@
         @variable(m, u[Arcs], Bin);
         @variable(m, r[Noeuds], Bin);
         if is_non_reserve
-            # @variable(m, x[union(Noeuds,alpha)], Bin);
-            # @variable(m, v[union(Arcs,ArcsFictif)], Bin);
+            @variable(m, v[union(Arcs,ArcsFictif)], Bin);
         end
         @variable(m, x[Noeuds], Bin);
 
-
+        # define the flow variables for connexity of reserve and non-reserve
+        # - get the nodes that will be concerned by each reserve commodity
         dmin = shortest_distances(N_noeuds,Voisins)
         NoeudsProche  = Vector{Vector{Int}}()
         for k in Noeuds
@@ -77,20 +73,21 @@
                 end
             end
         end
-        # if there is a maximum radius, reduce the number of arcs for each commodity k to consider only those starting from a node located at less than Rmax from k
         @variable(m, f[k in Commodites, i in NoeudsProche[k], j in Voisins[i];dmin[k,i]<=Rmax-1] >= 0);
+        # - take care of non-reserve flow variables
         if is_non_reserve
             NoeudsProche_nr  = Vector{Vector{Int}}()
             NoeudsFrontiere_nr = Vector{Vector{Int}}()
             for k in Noeuds
                 push!(NoeudsProche_nr, Vector{Int}())
                 push!(NoeudsFrontiere_nr, Vector{Int}())
-                push!(NoeudsFrontiere_nr[k], alpha)
                 for j in Noeuds
-                    if dmin[k,j]<= 2*Rmax
+                    # Rmax is used below but 2Rmax-2 should be used for theoretical proof
+                    if dmin[k,j]<= Rmax
                         push!(NoeudsProche_nr[k],j)
-                    elseif dmin[k,j] == 2*Rmax
-                        push!(NoeudsFrontiere_nr[k],j)
+                        if dmin[k,j] == Rmax
+                            push!(NoeudsFrontiere_nr[k],j)
+                        end
                     end
                 end
             end
@@ -126,28 +123,20 @@
         @constraint(m, visu_r[j in Noeuds], sum(u[j=>i] for i in Voisins[j]) ==  x[j]-r[j])
 
         # Arbre couvrant de la non-reserve
-        # if is_non_reserve
-        #     @constraint(m, locked_out, x[alpha] == 0)
+        if is_non_reserve
             # @constraint(m, arc_unique_nr[a in union(Aretes,AretesFictif)],  v[a[1]=>a[2]] + v[a[2]=>a[1]] <= 1) # useless/redundant
-            # @constraint(m, nb_arcs_nr, sum(v[d] for d in union(Arcs,ArcsFictif)) == sum(1-x[j] for j in Noeuds))
-            # @constraint(m, arc_reserve_1_nr[d in union(Arcs,ArcsFictif)],  v[d] <= 1-x[d[1]])
-            # @constraint(m, arc_reserve_2_nr[d in union(Arcs,ArcsFictif)],  v[d] <= 1-x[d[2]])
-            # @constraint(m, one_out_arc_int[j in NoeudsInterieurs], sum(v[j=>i] for i in VoisinsFictif[j]) ==  1-x[j])
-            # @constraint(m, no_out_arc_border[j in NoeudsPeripheriques], sum(v[j=>i] for i in Voisins[j]) == 0)
-            # @constraint(m, no_arc_from_alpha[d in ArcsFictif; d[1] == alpha], v[d] == 0)
-            # @constraint(m, all_arcs_to_alpha[d in ArcsFictif; d[2] == alpha], v[d] == 1 - x[d[1]])
-        # end
+            @constraint(m, nb_arcs_nr, sum(v[d] for d in union(Arcs,ArcsFictif)) == sum(1-x[j] for j in Noeuds))
+            @constraint(m, arc_reserve_1_nr[i in NoeudsInterieurs,j in Voisins[i]],  v[i=>j] <= 1-x[i])
+            @constraint(m, arc_reserve_2_nr[i in NoeudsInterieurs,j in Voisins[i]],  v[i=>j] <= 1-x[j])
+            @constraint(m, one_out_arc_int[j in NoeudsInterieurs], sum(v[j=>i] for i in Voisins[j]) ==  1-x[j])
+            @constraint(m, no_out_arc_border[j in NoeudsPeripheriques], sum(v[j=>i] for i in Voisins[j]) == 0)
+            @constraint(m, no_arc_from_alpha[d in ArcsFictif; d[1] == alpha], v[d] == 0)
+            @constraint(m, all_arcs_to_alpha[d in ArcsFictif; d[2] == alpha], v[d] == 1 - x[d[1]])
+        end
 
-        # avoid isolated nodes in the reserve and in the non-reserve
+        # avoid isolated nodes in the reserve and in the non-reserve (former Réduction damier but for all nodes)
         @constraint(m, no_isolated[j in Noeuds], x[j] <= sum(x[i] for i in Voisins[j]))
         @constraint(m, no_isolated_nr[j in NoeudsInterieurs], 1-x[j] <= sum(1-x[i] for i in Voisins[j]))
-
-        # Réduction damier
-        # if is_damier
-        #     NoeudsBlancsInterieurs = setdiff(NoeudsBlancs,NoeudsPeripheriques)
-        #     @constraint(m, damier_1[j in NoeudsBlancsInterieurs], 1-x[j] <=  sum(1-x[i] for i in Voisins[j]))
-        #     @constraint(m, damier_2[j in NoeudsBlancs], x[j] <=  sum(x[i] for i in Voisins[j]))
-        # end
 
         if is_rmax
             @constraint(m, source_rmax[j in Noeuds, i in Noeuds;dmin[i,j]>Rmax], x[i] <=  1-r[j])
@@ -165,6 +154,7 @@
         function my_callback_function(cb_data)
             # stop the callback if the solution is non-integer
             x_val = zeros(Int,N_noeuds)
+            # x_val = Dict{Int,Int}()
             for j in Noeuds
                 val = callback_value(cb_data, x[j])
                 if abs(val-round(Int,val)) < 1e-6
@@ -183,10 +173,10 @@
                     return
                 end
                 if is_non_reserve
-                    # val = callback_value(cb_data, v[d])
-                    # if abs(val-round(Int,val)) >= 1e-6
-                    #     return
-                    # end
+                    val = callback_value(cb_data, v[d])
+                    if abs(val-round(Int,val)) >= 1e-6
+                        return
+                    end
                 end
             end
             if is_non_reserve
@@ -304,7 +294,6 @@
                 # Lazy cuts pour la connectivité de la non-réserve
                 NonReserve_Components = connected_components(VoisinsFictif,1 .- x_val)
                 if length(NonReserve_Components) > 1
-
                     println("cb: $(length(NonReserve_Components)) connected components in non-reserve: $(NonReserve_Components)")
 
                     for c in 1:length(NonReserve_Components)
@@ -324,20 +313,14 @@
                             # Ajout des contraintes de flux de la non-réserve
                             for i in NoeudsProche_nr[k]
                                 for j in Voisins[i]
-                                    flux_arc_1_nr = @build_constraint(g[k,i,j] <= 1 - x[i])
+                                    flux_arc_1_nr = @build_constraint(g[k,i,j] <= v[i=>j])
                                     MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_1_nr)
-                                    flux_arc_1_nr = @build_constraint(g[k,i,j] <= 1 - x[j])
+                                    flux_arc_1_nr = @build_constraint(g[k,i,j] <= v[i=>j])
                                     MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_1_nr)
                                     flux_arc_2_nr = @build_constraint(g[k,i,j] <= 1-x[k])
                                     MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_2_nr)
                                 end
                             end
-                            # for i in NoeudsPeripheriques
-                            #     if i in NoeudsProche_nr[k]
-                            #         flux_arc_1_nr = @build_constraint(g[k,i,alpha] <= 1 - x[i])
-                            #         MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_1_nr)
-                            #     end
-                            # end
                             # no flow goes in k
                             source_k_nr_in = @build_constraint(sum(g[k,j,k] for j in Voisins[k]) == 0)
                             MOI.submit(m, MOI.LazyConstraint(cb_data), source_k_nr_in)
@@ -348,17 +331,17 @@
                             # no flow goes out of alpha
                             Frontiere = intersect(NoeudsPeripheriques, NoeudsProche_nr[k])
                             union!(Frontiere, NoeudsFrontiere_nr[k])
+                            Interieur = setdiff(NoeudsProche_nr[k], Frontiere)
                             sink_k_nr_out = @build_constraint(sum(g[k,i,j] for i in Frontiere for j in Voisins[i]) == 0)
                             MOI.submit(m, MOI.LazyConstraint(cb_data),sink_k_nr_out)
                             # 1 flow goes to the frontier if k is not in the reserve
-                            sink_k_nr_in = @build_constraint(sum(g[k,j,i] for i in Frontiere for j in Voisins[i] if dmin[k,j] <= 2*Rmax-1) == 1 - x[k])
+                            sink_k_nr_in = @build_constraint(sum(g[k,j,i] for i in Frontiere for j in Voisins[i] if j in Interieur) == 1 - x[k])
                             MOI.submit(m, MOI.LazyConstraint(cb_data), sink_k_nr_in)
 
                             # at all other nodes flow must be conserved
-                            Interieur = setdiff(NoeudsProche_nr[k], Frontiere)
                             for i in Interieur
                                 if i != k
-                                    conservation_flux_nr = @build_constraint(sum(g[k, i, j] for j in VoisinsFictif[i]) - sum(g[k,j, i] for j in Voisins[i]) == 0)
+                                    conservation_flux_nr = @build_constraint(sum(g[k, i, j] for j in Voisins[i]) - sum(g[k,j, i] for j in Voisins[i]) == 0)
                                     MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_nr)
                                 end
                             end
@@ -373,19 +356,19 @@
             MOI.set(m, MOI.LazyConstraintCallback(), my_callback_function)
         else
             # # WARNING: this is not compatible with Rmax
-            # @constraint(m, flux_arc_1[k in Commodites, d in Arcs], f[k,d] <= u[d])
-            # @constraint(m, flux_arc_2[k in Commodites, d in Arcs], f[k,d] <= x[k])
-            # @constraint(m, conservation_flux_1[k in Commodites, n in Noeuds;n!=k], sum(f[k,j=>n] for j in Voisins[n]) - sum(f[k,n=>j] for j in Voisins[n]) <= r[n])
-            # @constraint(m, conservation_flux_2[k in Commodites, n in Noeuds;n!=k], sum(f[k,j=>n] for j in Voisins[n]) - sum(f[k,n=>j] for j in Voisins[n]) >= 0)
-            # @constraint(m, source_k[k in Commodites], sum(f[k, k=>j] for j in Voisins[k]) - sum(f[k,j=>k] for j in Voisins[k]) == x[k]-r[k])
+            @constraint(m, flux_arc_1[k in Commodites, d in Arcs], f[k,d] <= u[d])
+            @constraint(m, flux_arc_2[k in Commodites, d in Arcs], f[k,d] <= x[k])
+            @constraint(m, conservation_flux_1[k in Commodites, n in Noeuds;n!=k], sum(f[k,j=>n] for j in Voisins[n]) - sum(f[k,n=>j] for j in Voisins[n]) <= r[n])
+            @constraint(m, conservation_flux_2[k in Commodites, n in Noeuds;n!=k], sum(f[k,j=>n] for j in Voisins[n]) - sum(f[k,n=>j] for j in Voisins[n]) >= 0)
+            @constraint(m, source_k[k in Commodites], sum(f[k, k=>j] for j in Voisins[k]) - sum(f[k,j=>k] for j in Voisins[k]) == x[k]-r[k])
 
-            # if is_non_reserve
-            #     @constraint(m, flux_arc_1_nr[k in Commodites, d in union(Arcs,ArcsFictif)], g[k,d] <= v[d])
-            #     @constraint(m, flux_arc_2_nr[k in Commodites, d in union(Arcs,ArcsFictif)], g[k,d] <= 1-x[k]) # redondante ?
-            #     @constraint(m, conservation_flux_1_nr[k in Commodites], sum(g[k,alpha=>j] for j in VoisinsFictif[alpha]) - sum(g[k,j=>alpha] for j in VoisinsFictif[alpha]) <= 1)
-            #     @constraint(m, conservation_flux_2_nr[k in Commodites,  n in Noeuds;n!=k], sum(g[k,j=>n] for j in VoisinsFictif[n]) - sum(g[k,n=>j] for j in VoisinsFictif[n]) == 0)
-            #     @constraint(m, sink_k_nr[k in Commodites], sum(g[k, j=>k] for j in VoisinsFictif[k]) - sum(g[k,k=>j] for j in VoisinsFictif[k]) == 1 - x[k])
-            # end
+            if is_non_reserve
+                @constraint(m, flux_arc_1_nr[k in Commodites, d in union(Arcs,ArcsFictif)], g[k,d] <= v[d])
+                @constraint(m, flux_arc_2_nr[k in Commodites, d in union(Arcs,ArcsFictif)], g[k,d] <= 1-x[k]) # redondante ?
+                @constraint(m, conservation_flux_1_nr[k in Commodites], sum(g[k,alpha=>j] for j in VoisinsFictif[alpha]) - sum(g[k,j=>alpha] for j in VoisinsFictif[alpha]) <= 1)
+                @constraint(m, conservation_flux_2_nr[k in Commodites,  n in Noeuds;n!=k], sum(g[k,j=>n] for j in VoisinsFictif[n]) - sum(g[k,n=>j] for j in VoisinsFictif[n]) == 0)
+                @constraint(m, sink_k_nr[k in Commodites], sum(g[k, j=>k] for j in VoisinsFictif[k]) - sum(g[k,k=>j] for j in VoisinsFictif[k]) == 1 - x[k])
+            end
         end
 
         return m
