@@ -93,11 +93,9 @@
 
             # Arêtes du graphe associé à la grille de taille Nx*Ny
             AretesFictif = Vector{Pair{Int,Int}}()
-            for k in Noeuds
+            for k in NoeudsPeripheriques
                 # arêtes noeuds fictif avec les noeuds périphériques
-                if sum(findall(NoeudsPeripheriques .== k))>0
-                    push!(AretesFictif,(alpha=>k))
-                end
+                push!(AretesFictif,(alpha=>k))
             end
 
             # Liste des voisins pour chaque noeud

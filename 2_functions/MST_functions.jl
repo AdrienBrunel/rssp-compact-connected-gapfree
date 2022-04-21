@@ -406,7 +406,6 @@
         println("Le score de la réserve est : Score = Cout + beta x Perimetre = $(Cout) + $(beta) x $(Perimetre) = $(Score)")
 
         # lecture des données du graphe de la grille
-
         dmin = shortest_distances(N_noeuds,Voisins)
         Reserve = Noeuds[findall(x_opt .== 1)]
         Rayon = 0
@@ -416,31 +415,47 @@
                 Rayon = tmp
             end
         end
-        println("Le rayon de la réserve est : Rayon = $(Rayon)")
+        println("- outside radius of the reserve: $(Rayon)")
 
+        # compute the inside radius of the reserve
+        # - for each node of the reserve, compute its neighbors in the reserve
         Voisins_InReserve = Vector{Vector{Int}}()
-        for k in Reserve
+        for i in 1:length(Reserve)
             push!(Voisins_InReserve, Vector{Int}())
-        end
-
-        cpt = 0
-        for i in Reserve
-            cpt = cpt+1
-            for j in Voisins[i]
-                if sum(j .== Reserve) > 0
-                    push!(Voisins_InReserve[cpt],findall(j .== Reserve)[1])
+            n1 = Reserve[i]
+            for n2 in  Reserve
+                if n2 ∈ Voisins[n1]
+                    push!(Voisins_InReserve[i], findfirst(Reserve .== n2))
                 end
             end
         end
+        # - get minimum pairwise distances
         dmin_in_reserve = shortest_distances(length(Reserve),Voisins_InReserve)
-        Rayon_InReserve = maximum(dmin_in_reserve)/2
-        println("Le rayon interne de la réserve est : Rayon = $(Rayon_InReserve)")
+        # - the center of reserve is the node whose maximum distance to other nodes is smallest
+        max_dmin = maximum(dmin_in_reserve, dims = 2)
+        Rayon_InReserve, center = findmin(max_dmin)
+        println("- inside radius of the reserve: $(Rayon_InReserve)")
 
+        # verify that the reserve is connected
         Reserve_Components = connected_components(Voisins,x_opt)
         if length(Reserve_Components) == 1
-            println("The reserve is connected")
+            println("- the reserve is connected")
         else
-            println("The reserve has $(length(Reserve_Components)) connected components")
+            println("- the reserve has $(length(Reserve_Components)) connected components")
+        end
+
+        # detect the number of holes in the reserve
+        VoisinsFictif  = gridgraph.VoisinsFictif
+        # - add an artificial node in the solution if not already there
+        if length(x_opt) == N_noeuds
+            push!(x_opt, 0)
+        end
+        # - get the number of connected components in the complementary of the reserve
+        NonReserve_Components = connected_components(VoisinsFictif,1 .- x_opt)
+        if length(NonReserve_Components) == 1
+            println("- the reserve has no hole")
+        else
+            println("- the reserve has $(length(NonReserve_Components)-1) holes")
         end
 
         return Perimetre,Cout,Score,Rayon,Rayon_InReserve

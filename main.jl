@@ -29,7 +29,7 @@ root_dir=pwd();
     Nx        = 2*12
     Ny        = 2*7
     # Compacité
-    beta      = -1
+    beta      = 1
     # Nombre de conservation features
     spec_nb   = 3
     # Graine pseudo-aléatoire
@@ -42,17 +42,15 @@ root_dir=pwd();
     is_rmax        = true
 
     # Divers
-    Rmax = 6
+    if is_rmax
+        Rmax = 6
+    else
+        Rmax = 18
+    end
 
     #folder = "24x14_CF3_BLM0.5_fromfiles"
     folder = "$(Nx)x$(Ny)_CF$(spec_nb)_BLM$(beta)"
-
-
-    if is_rmax
-        params = Parameters(Nx,Ny,beta,spec_nb,rand_seed,is_non_reserve,is_callbacks,is_damier,is_rmax,Rmax)
-    else
-        params = Parameters(Nx,Ny,beta,spec_nb,rand_seed,is_non_reserve,is_callbacks,is_damier,is_rmax)
-    end
+    params = Parameters(Nx,Ny,beta,spec_nb,rand_seed,is_non_reserve,is_callbacks,is_damier,is_rmax,Rmax)
 
     # Chargement des fonctions
     println("MST_functions.jl ...");include("$(root_dir)/2_functions/MST_functions.jl");
@@ -138,9 +136,9 @@ root_dir=pwd();
     x_opt,z_opt,u_opt,r_opt    = read_info_graph_reserve(my_model,gridgraph,is_beta)
     Perimetre,Cout,Score,Rayon,Rayon_InReserve = print_info_reserve(x_opt,instance,gridgraph)
     title = "Solution_$(computation_time)s_Score$(Score)_Perimetre$(Perimetre)_Cout$(Cout)_$(is_beta)_$(is_non_reserve)_$(is_callbacks)_$(is_damier)_$(is_rmax)";
-    if is_non_reserve
-        x_opt,v_opt = read_info_graph_nonreserve(my_model,gridgraph)
-        visualisation_reserve_nonreserve_graph(x_opt,u_opt,r_opt,v_opt,"/$(res_dir)/$(title).png",gridgraph)
-    else
-        visualisation_reserve_graph(x_opt,u_opt,r_opt,"/$(res_dir)/$(title).png",gridgraph)
-    end
+    # if is_non_reserve
+    #     x_opt,v_opt = read_info_graph_nonreserve(my_model,gridgraph)
+    #     visualisation_reserve_nonreserve_graph(x_opt,u_opt,r_opt,v_opt,"/$(res_dir)/$(title).png",gridgraph)
+    # else
+    visualisation_reserve_graph(x_opt,u_opt,r_opt,"/$(res_dir)/$(title).png",gridgraph)
+    # end

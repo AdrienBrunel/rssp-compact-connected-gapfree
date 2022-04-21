@@ -17,6 +17,8 @@
         BoundaryLength       = instance.BoundaryLength
         BoundaryCorrection   = instance.BoundaryCorrection
         Beta                 = instance.Beta
+        Rmax = params.Rmax
+
 
         if is_damier
             NoeudsNoirs  = gridgraph.NoeudsNoirs
@@ -26,15 +28,10 @@
         if is_non_reserve
             NoeudsFictif   = gridgraph.NoeudsFictif
             VoisinsFictif  = gridgraph.VoisinsFictif
-            AretesFictif   = gridgraph.AretesFictif
             ArcsFictif     = gridgraph.ArcsFictif
             alpha          = gridgraph.alpha
-            N_noeudsfictif = length(NoeudsFictif)
         end
 
-        if is_rmax
-            Rmax = params.Rmax
-        end
 
 
 
@@ -51,47 +48,53 @@
 		set_optimizer_attribute(m, "TimeLimit", 1000)
 		set_optimizer_attribute(m, "LogFile", "$(res_dir)/gurobi_log.txt")
 
+        NoeudsInterieurs = setdiff(Noeuds,NoeudsPeripheriques)
         if is_damier
-            Commodites = NoeudsNoirs
+            Commodites_nr = intersect(NoeudsNoirs, NoeudsInterieurs)
         else
-            Commodites = Noeuds
+            Commodites_nr = NoeudsInterieurs
         end
+        Commodites = Noeuds
 		if is_beta
         	@variable(m, z[Arcs], Bin);
 		end
         @variable(m, u[Arcs], Bin);
         @variable(m, r[Noeuds], Bin);
         if is_non_reserve
-            @variable(m, x[union(Noeuds,alpha)], Bin);
-            @variable(m, v[union(Arcs,ArcsFictif)], Bin);
-            @variable(m, g[Commodites,union(Arcs,ArcsFictif)], Bin);
-        else
-            @variable(m, x[Noeuds], Bin);
+            # @variable(m, x[union(Noeuds,alpha)], Bin);
+            # @variable(m, v[union(Arcs,ArcsFictif)], Bin);
         end
+        @variable(m, x[Noeuds], Bin);
 
-        if is_rmax
-            dmin = shortest_distances(N_noeuds,Voisins)
-            NoeudsProche  = Vector{Vector{Int}}()
-            VoisinsProche = Vector{Vector{Vector{Int}}}()
+
+        dmin = shortest_distances(N_noeuds,Voisins)
+        NoeudsProche  = Vector{Vector{Int}}()
+        for k in Noeuds
+            push!(NoeudsProche, Vector{Int}())
+            for j in Noeuds
+                if dmin[k,j]<=Rmax
+                    push!(NoeudsProche[k],j)
+                end
+            end
+        end
+        # if there is a maximum radius, reduce the number of arcs for each commodity k to consider only those starting from a node located at less than Rmax from k
+        @variable(m, f[k in Commodites, i in NoeudsProche[k], j in Voisins[i];dmin[k,i]<=Rmax-1] >= 0);
+        if is_non_reserve
+            NoeudsProche_nr  = Vector{Vector{Int}}()
+            NoeudsFrontiere_nr = Vector{Vector{Int}}()
             for k in Noeuds
-                push!(NoeudsProche, Vector{Int}())
-                push!(VoisinsProche, Vector{Vector{Int}}())
+                push!(NoeudsProche_nr, Vector{Int}())
+                push!(NoeudsFrontiere_nr, Vector{Int}())
+                push!(NoeudsFrontiere_nr[k], alpha)
                 for j in Noeuds
-                    push!(VoisinsProche[k], Vector{Int}())
-                    if dmin[k,j]<=Rmax
-                        push!(NoeudsProche[k],j)
-                        for i in Voisins[j]
-                            if dmin[k,i]<=(Rmax-1)
-                                push!(VoisinsProche[k][j],i)
-                            end
-                        end
+                    if dmin[k,j]<= 2*Rmax
+                        push!(NoeudsProche_nr[k],j)
+                    elseif dmin[k,j] == 2*Rmax
+                        push!(NoeudsFrontiere_nr[k],j)
                     end
                 end
             end
-            # if there is a maximum radius, reduce the number of arcs for each commodity k to consider only those starting from a node located at less than Rmax from k
-            @variable(m, f[k in Commodites, i in NoeudsProche[k], j in Voisins[i];dmin[k,i]<=Rmax-1], Bin);
-        else
-            @variable(m, f[Commodites,Arcs], Bin);
+            @variable(m, g[k in Commodites_nr, i in NoeudsProche_nr[k], j in Voisins[i]] >= 0);
         end
 
 		## OBJECTIF ------------------------------------------------------------
@@ -123,19 +126,21 @@
         @constraint(m, visu_r[j in Noeuds], sum(u[j=>i] for i in Voisins[j]) ==  x[j]-r[j])
 
         # Arbre couvrant de la non-reserve
-        if is_non_reserve
-            @constraint(m, locked_out, x[alpha] == 0)
+        # if is_non_reserve
+        #     @constraint(m, locked_out, x[alpha] == 0)
             # @constraint(m, arc_unique_nr[a in union(Aretes,AretesFictif)],  v[a[1]=>a[2]] + v[a[2]=>a[1]] <= 1) # useless/redundant
-            @constraint(m, nb_arcs_nr, sum(v[d] for d in union(Arcs,ArcsFictif)) == sum(1-x[j] for j in union(Noeuds,alpha))-1)
-            @constraint(m, arc_reserve_1_nr[d in union(Arcs,ArcsFictif)],  v[d] <= 1-x[d[1]])
-            @constraint(m, arc_reserve_2_nr[d in union(Arcs,ArcsFictif)],  v[d] <= 1-x[d[2]])
-            @constraint(m, visu_nr[j in Noeuds], sum(v[j=>i] for i in VoisinsFictif[j]) ==  1-x[j]) # one out-arc from each non-reserve node
-        end
+            # @constraint(m, nb_arcs_nr, sum(v[d] for d in union(Arcs,ArcsFictif)) == sum(1-x[j] for j in Noeuds))
+            # @constraint(m, arc_reserve_1_nr[d in union(Arcs,ArcsFictif)],  v[d] <= 1-x[d[1]])
+            # @constraint(m, arc_reserve_2_nr[d in union(Arcs,ArcsFictif)],  v[d] <= 1-x[d[2]])
+            # @constraint(m, one_out_arc_int[j in NoeudsInterieurs], sum(v[j=>i] for i in VoisinsFictif[j]) ==  1-x[j])
+            # @constraint(m, no_out_arc_border[j in NoeudsPeripheriques], sum(v[j=>i] for i in Voisins[j]) == 0)
+            # @constraint(m, no_arc_from_alpha[d in ArcsFictif; d[1] == alpha], v[d] == 0)
+            # @constraint(m, all_arcs_to_alpha[d in ArcsFictif; d[2] == alpha], v[d] == 1 - x[d[1]])
+        # end
 
         # avoid isolated nodes in the reserve and in the non-reserve
         @constraint(m, no_isolated[j in Noeuds], x[j] <= sum(x[i] for i in Voisins[j]))
-        NoeudsInterieurs = setdiff(Noeuds,NoeudsPeripheriques)
-        @constraint(m, no_isolated_nr[j in NoeudsInterieurs], 1-x[j] <= sum(1-x[i] for i in VoisinsFictif[j]))
+        @constraint(m, no_isolated_nr[j in NoeudsInterieurs], 1-x[j] <= sum(1-x[i] for i in Voisins[j]))
 
         # Réduction damier
         # if is_damier
@@ -148,283 +153,239 @@
             @constraint(m, source_rmax[j in Noeuds, i in Noeuds;dmin[i,j]>Rmax], x[i] <=  1-r[j])
         end
 
-        Commodites_restante_nr = copy(Commodites)
-        Commodites_restante = copy(Commodites)
+        if is_damier
+            Commodites_restante = copy(NoeudsNoirs)
+        else
+            Commodites_restante = copy(Commodites)
+        end
+        Commodites_restante_nr = copy(Commodites_nr)
         Commodites_choisies = []
         Commodites_choisies_nr = []
-        # Contrainte sur les variables de flux
-        if is_callbacks
 
-            function my_callback_function(cb_data)
-
-                # stop the callback if the solution is non-integer
-                for d in Arcs
-                    val = callback_value(cb_data, v[d])
-                    if abs(val-round(Int,val)) >=  1e-4
-                        return
-                    end
-                    val = callback_value(cb_data, u[d])
-                    if abs(val-round(Int,val)) >=  1e-4
-                        return
-                    end
+        function my_callback_function(cb_data)
+            # stop the callback if the solution is non-integer
+            x_val = zeros(Int,N_noeuds)
+            for j in Noeuds
+                val = callback_value(cb_data, x[j])
+                if abs(val-round(Int,val)) < 1e-6
+                    x_val[j] = round(Int,val)
+                else
+                    return
                 end
-                for j in Noeuds
-                    val = callback_value(cb_data, r[j])
-                    if abs(val-round(Int,val)) >= 1e-4
-                        return
-                    end
+                val = callback_value(cb_data, r[j])
+                if abs(val-round(Int,val)) >= 1e-6
+                    return
+                end
+            end
+            for d in Arcs
+                val = callback_value(cb_data, u[d])
+                if abs(val-round(Int,val)) >= 1e-6
+                    return
                 end
                 if is_non_reserve
-                    x_val = zeros(Int,N_noeudsfictif)
-                    for j in NoeudsFictif
-                        val = callback_value(cb_data, x[j])
-                        if abs(val-round(Int,val)) < 1e-6
-                            x_val[j] = round(Int,val)
-                        else
-                            return
-                        end
-                    end
-                else
-                    x_val = zeros(Int,N_noeuds)
-                    for j in Noeuds
-                        val = callback_value(cb_data, x[j])
-                        if abs(val-round(Int,val)) < 1e-6
-                            x_val[j] = round(Int,val)
-                        else
-                            return
+                    # val = callback_value(cb_data, v[d])
+                    # if abs(val-round(Int,val)) >= 1e-6
+                    #     return
+                    # end
+                end
+            end
+            if is_non_reserve
+                push!(x_val, 0)
+            end
+
+            # get the connected components of the reserve
+            Reserve_Components = connected_components(Voisins,x_val)
+
+            # select one node per component to add it as a commodity
+            Commodities_to_add = []
+            if length(Reserve_Components) > 1
+                println("cb: $(length(Reserve_Components)) connected components in the reserve : $(Reserve_Components)")
+
+                for c in 1:length(Reserve_Components)
+
+                    # choix de la commodité
+                    Component = intersect(Reserve_Components[c],Commodites_restante)
+                    # make sure that a commodity is not taken twice
+                    if isempty(Component)
+                        println("cb: every commodity of the component has already been added")
+                        continue
+                    end 
+                    k = Component[findmax(Rentability[Component])[2][1]]
+                    push!(Commodities_to_add, k)
+                    push!(Commodites_choisies, k)
+                    setdiff!(Commodites_restante, k)
+                    println("cb: chosen commodity $(k)")
+                end
+            end
+
+            # if the reserve is connected but needs to have a maximum radius compute pairwise distances in the reserve
+            if is_rmax && (length(Reserve_Components) == 1)
+                Reserve = Noeuds[findall(x_val .== 1)]
+                
+                # for each node of the reserve, compute its neighbors in the reserve
+                Voisins_InReserve = Vector{Vector{Int}}()
+                for i in 1:length(Reserve)
+                    push!(Voisins_InReserve, Vector{Int}())
+                    n1 = Reserve[i]
+                    for n2 in  Reserve
+                        if n2 ∈ Voisins[n1]
+                            push!(Voisins_InReserve[i], findfirst(Reserve .== n2))
                         end
                     end
                 end
 
-                # Lazy cuts pour la connectivité de la réserve
-                Reserve_Components = connected_components(Voisins,x_val)
-                if length(Reserve_Components) > 1
-
-                    println("$(length(Reserve_Components)) Composante connexes de la réserve : $(Reserve_Components)")
-
-                    for c in 1:length(Reserve_Components)
-
-                        # choix de la commodité
-                        Component = intersect(Reserve_Components[c],Commodites)
-                        k = Component[findmax(Rentability[Component])[2][1]]
-                        println("La commodité choisie pour la réserve est $(k)")
-
-                        # make sure that a commodity is not taken twice
-                        if k in Commodites_choisies
+                # get minimum pairwise distances
+                dmin_in_reserve = shortest_distances(length(Reserve),Voisins_InReserve)
+                # get true center of reserve: it is the node whose maximum distance from other nodes is smallest
+                max_dmin = maximum(dmin_in_reserve, dims = 2)
+                (radius, center) = findmin(max_dmin)
+                center = center[1]
+                # add the commodities of nodes that are too far away from true center
+                # WARNING: possible bug here if all the commodities far from the center are already added
+                if radius > Rmax
+                    println("cb: center is $(Reserve[center]) and radius is $radius")
+                    for k in Reserve[findall(dmin_in_reserve[center,:] .== radius)]
+                        if k ∈ Commodites_choisies
                             continue
                         else
                             push!(Commodites_choisies, k)
-                        end
-
-                        # Ajout des contraintes de flux de la réserve
-                        if is_rmax
-                            for i in NoeudsProche[k]
-                                if dmin[k,i]==Rmax
-                                    continue
-                                end
-                                for j in Voisins[i]
-                                    # flow can only go through selected arcs
-                                    flux_arc_1 = @build_constraint(f[k,i,j] <= u[i=>j])
-                                    MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_1)
-                                    # every flow is zero if the commodity is not in the reserve
-                                    flux_arc_2 = @build_constraint(f[k,i,j] <= x[k])
-                                    MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_2)
-                                end
-                            end
-                            # 1 value of flow goes out of k iff k is in the reserve and it is not the root of the tree
-                            source_k = @build_constraint(sum(f[k,k,j] for j in Voisins[k]) - sum(f[k,j,k] for j in Voisins[k]) == x[k]-r[k])
-                            MOI.submit(m, MOI.LazyConstraint(cb_data), source_k)
-
-                            for i in NoeudsProche[k]
-                                if i==k
-                                    continue
-                                end
-                                if dmin[k,i] == Rmax
-                                    # if i is exactly Rmax away from k, no flow can go out from i, so the in-flow is equal to one iff it is the root
-                                    conservation_flux_1 = @build_constraint(sum(f[k,j,i] for j in VoisinsProche[k][i]) == r[i])
-                                    MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_1)
-                                else
-                                    # flow is conserved at every node but the root, where in-flow can be equal to one (if the flow from k is also equal to one)
-                                    conservation_flux_1 = @build_constraint(sum(f[k,j,i] for j in VoisinsProche[k][i]) - sum(f[k,i,j] for j in VoisinsProche[k][i]) <= r[i])
-                                    MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_1)
-                                    conservation_flux_2 = @build_constraint(sum(f[k,j,i] for j in VoisinsProche[k][i]) - sum(f[k,i,j] for j in VoisinsProche[k][i]) >= 0)
-                                    MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_2)
-                                end
-                            end
-                        else
-                            for i in Noeuds
-                                for j in Voisins[i]
-                                    # flow can only go through selected arcs
-                                    flux_arc_1 = @build_constraint(f[k,i=>j] <= u[i=>j])
-                                    MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_1)
-                                    # every flow is zero if the commodity is not in the reserve
-                                    flux_arc_2 = @build_constraint(f[k,i=>j] <= x[k])
-                                    MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_2)
-                                end
-                            end
-                            # 1 value of flow goes out of k iff k is in the reserve and it is not the root of the tree
-                            source_k = @build_constraint(sum(f[k,k=>j] for j in Voisins[k]) - sum(f[k,j=>k] for j in Voisins[k]) == x[k]-r[k])
-                            MOI.submit(m, MOI.LazyConstraint(cb_data), source_k)
-
-                            for i in Noeuds
-                                if i != k
-                                    # flow is conserved at every node but the root, where in-flow can be equal to one (if the flow from k is also equal to one)
-                                    conservation_flux_1 = @build_constraint(sum(f[k,j=>i] for j in Voisins[i]) - sum(f[k,i=>j] for j in Voisins[i]) <= r[i])
-                                    MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_1)
-                                    conservation_flux_2 = @build_constraint(sum(f[k,j=>i] for j in Voisins[i]) - sum(f[k,i=>j] for j in Voisins[i]) >= 0)
-                                    MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_2)
-                                end
-                            end
+                            setdiff!(Commodites_restante, k)
+                            println("cb: node $k too far away, add commodity")
+                            push!(Commodities_to_add, k)
+                            break
                         end
                     end
-                else
-                    if is_non_reserve
+                end 
+            end
 
-                        # Lazy cuts pour la connectivité de la non-réserve
-                        NonReserve_Components = connected_components(VoisinsFictif,1 .- x_val)
-                        if length(NonReserve_Components) > 1
-
-                            println("$(length(NonReserve_Components)) Composante Connexes de la Non-Réserve: $(NonReserve_Components)")
-
-                            for c in 1:length(NonReserve_Components)
-                                if !(sum(findall(NonReserve_Components[c] .== alpha))>1)
-
-                                    # choix de la commodité
-                                    Component = intersect(NonReserve_Components[c],Commodites)
-                                    k = Component[findmin(Rentability[Component])[2][1]]
-                                    println("La commodité choisie pour la non-réserve est $(k)")
-                                    # make sure that a commodity is not taken twice
-                                    if k in Commodites_choisies_nr
-                                        println("Commodity $k has already been chosen")
-                                        println("out flow from $k=", sum(callback_value(cb_data, g[k, k=>j]) for j in VoisinsFictif[k]))
-                                        continue
-                                    else
-                                        push!(Commodites_choisies_nr, k)
-                                    end
-
-
-                                    # Ajout des contraintes de flux de la non-réserve
-                                    for d in union(Arcs,ArcsFictif)
-                                        flux_arc_1_nr = @build_constraint(g[k,d] <= v[d])
-                                        MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_1_nr)
-                                        flux_arc_2_nr = @build_constraint(g[k,d] <= 1-x[k])
-                                        MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_2_nr)
-                                    end
-                                    source_k_nr_in = @build_constraint(sum(g[k,j=>k] for j in VoisinsFictif[k]) == 0)
-                                    MOI.submit(m, MOI.LazyConstraint(cb_data), source_k_nr_in)
-                                    source_k_nr_out = @build_constraint(sum(g[k, k=>j] for j in VoisinsFictif[k]) == 1 - x[k])
-                                    MOI.submit(m, MOI.LazyConstraint(cb_data), source_k_nr_out)
-
-                                    sink_k_nr_out = @build_constraint(sum(g[k,alpha=>j] for j in VoisinsFictif[alpha]) == 0)
-                                    MOI.submit(m, MOI.LazyConstraint(cb_data),sink_k_nr_out)
-									sink_k_nr_in = @build_constraint(sum(g[k,j=>alpha] for j in VoisinsFictif[alpha]) == 1 - x[k])
-                                    MOI.submit(m, MOI.LazyConstraint(cb_data), sink_k_nr_in)
-
-									for i in Noeuds
-		                                if i != k
-											conservation_flux_nr = @build_constraint(sum(g[k, i=>j] for j in VoisinsFictif[i]) - sum(g[k,j=>i] for j in Voisins[i]) == 0)
-		                                    MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_nr)
-										end
-									end
-
-									#@constraint(m, conservation_flux_2_nr[k in Noeuds,  n in Noeuds;n!=k], sum(g[k,j=>n] for j in VoisinsFictif[n]) - sum(g[k,n=>j] for j in VoisinsFictif[n]) == 0)
-
-
-                                end
-                            end
-                        end
+            # add the lazy cuts for connectivity and size oif the reserve
+            for k in Commodities_to_add
+                # Ajout des contraintes de flux de la réserve
+                for i in NoeudsProche[k]
+                    if dmin[k,i]==Rmax
+                        # if i is exactly Rmax away from k, no flow can go out from i, so the in-flow can be equal to one iff it is the root
+                        conservation_flux_1 = @build_constraint(sum(f[k,j,i] for j in Voisins[i] if dmin[k,j] <= Rmax-1) <= r[i])
+                        MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_1)
+                        continue
                     end
+                    for j in Voisins[i]
+                        # flow can only go through selected arcs
+                        flux_arc_1 = @build_constraint(f[k,i,j] <= u[i=>j])
+                        MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_1)
+                        # every flow is zero if the commodity is not in the reserve
+                        flux_arc_2 = @build_constraint(f[k,i,j] <= x[k])
+                        MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_2)
+                    end
+                    if i==k
+                        continue
+                    end
+                    # flow is conserved at every node but the root, where in-flow can be equal to one (if the flow from k is also equal to one)
+                    conservation_flux_1 = @build_constraint(sum(f[k,j,i] for j in Voisins[i] if dmin[k,j] <= Rmax-1) - sum(f[k,i,j] for j in Voisins[i]) <= r[i])
+                    MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_1)
+                    conservation_flux_2 = @build_constraint(sum(f[k,j,i] for j in Voisins[i] if dmin[k,j] <= Rmax-1) - sum(f[k,i,j] for j in Voisins[i]) >= 0)
+                    MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_2)
                 end
+                # the in-flow in k is zero
+                source_k_in = @build_constraint(sum(f[k,j,k] for j in Voisins[k]) == 0)
+                MOI.submit(m, MOI.LazyConstraint(cb_data), source_k_in)
+                # 1 value of flow goes out of k iff k is in the reserve and it is not the root of the tree
+                source_k_out = @build_constraint(sum(f[k,k,j] for j in Voisins[k]) == x[k]-r[k])
+                MOI.submit(m, MOI.LazyConstraint(cb_data), source_k_out)
 
                 if is_rmax
+                    # no more than Rmax positive flows for the commodity
+                    rmax_inreserve = @build_constraint(sum(f[k, i, j] for i in NoeudsProche[k] for j in Voisins[i] if dmin[k,i] <= Rmax-1) <= Rmax)
+                    MOI.submit(m, MOI.LazyConstraint(cb_data), rmax_inreserve)
+                end
+            end
 
-					r_val = zeros(Int,N_noeuds)
-                    for j in Noeuds
-						val = callback_value(cb_data, r[j])
-						if abs(val-round(Int,val)) < 1e-4
-                            r_val[j] = round(Int,val)
-                        else
-                            return
+            # if no lazy cut has been added for the reserve, look at the connectivity of nonreserve
+            if isempty(Commodities_to_add) && is_non_reserve
+                # Lazy cuts pour la connectivité de la non-réserve
+                NonReserve_Components = connected_components(VoisinsFictif,1 .- x_val)
+                if length(NonReserve_Components) > 1
+
+                    println("cb: $(length(NonReserve_Components)) connected components in non-reserve: $(NonReserve_Components)")
+
+                    for c in 1:length(NonReserve_Components)
+                        if !(sum(findall(NonReserve_Components[c] .== alpha))>1)
+                            Component = intersect(NonReserve_Components[c],Commodites_restante_nr)
+                            # make sure that a commodity is not taken twice
+                            if isempty(Component)
+                                println("cb: every commodity of the component has already been added")
+                                continue
+                            end 
+                            # choose commodity
+                            k = Component[findmin(Rentability[Component])[2][1]]
+                            push!(Commodites_choisies_nr, k)
+                            setdiff!(Commodites_restante_nr, k)
+                            println("cb: chosen commodity $(k)")
+
+                            # Ajout des contraintes de flux de la non-réserve
+                            for i in NoeudsProche_nr[k]
+                                for j in Voisins[i]
+                                    flux_arc_1_nr = @build_constraint(g[k,i,j] <= 1 - x[i])
+                                    MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_1_nr)
+                                    flux_arc_1_nr = @build_constraint(g[k,i,j] <= 1 - x[j])
+                                    MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_1_nr)
+                                    flux_arc_2_nr = @build_constraint(g[k,i,j] <= 1-x[k])
+                                    MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_2_nr)
+                                end
+                            end
+                            # for i in NoeudsPeripheriques
+                            #     if i in NoeudsProche_nr[k]
+                            #         flux_arc_1_nr = @build_constraint(g[k,i,alpha] <= 1 - x[i])
+                            #         MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_1_nr)
+                            #     end
+                            # end
+                            # no flow goes in k
+                            source_k_nr_in = @build_constraint(sum(g[k,j,k] for j in Voisins[k]) == 0)
+                            MOI.submit(m, MOI.LazyConstraint(cb_data), source_k_nr_in)
+                            # 1 flow goes out of k if it is not in the reserve
+                            source_k_nr_out = @build_constraint(sum(g[k,k,j] for j in Voisins[k]) == 1 - x[k])
+                            MOI.submit(m, MOI.LazyConstraint(cb_data), source_k_nr_out)
+
+                            # no flow goes out of alpha
+                            Frontiere = intersect(NoeudsPeripheriques, NoeudsProche_nr[k])
+                            union!(Frontiere, NoeudsFrontiere_nr[k])
+                            sink_k_nr_out = @build_constraint(sum(g[k,i,j] for i in Frontiere for j in Voisins[i]) == 0)
+                            MOI.submit(m, MOI.LazyConstraint(cb_data),sink_k_nr_out)
+                            # 1 flow goes to the frontier if k is not in the reserve
+                            sink_k_nr_in = @build_constraint(sum(g[k,j,i] for i in Frontiere for j in Voisins[i] if dmin[k,j] <= 2*Rmax-1) == 1 - x[k])
+                            MOI.submit(m, MOI.LazyConstraint(cb_data), sink_k_nr_in)
+
+                            # at all other nodes flow must be conserved
+                            Interieur = setdiff(NoeudsProche_nr[k], Frontiere)
+                            for i in Interieur
+                                if i != k
+                                    conservation_flux_nr = @build_constraint(sum(g[k, i, j] for j in VoisinsFictif[i]) - sum(g[k,j, i] for j in Voisins[i]) == 0)
+                                    MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_nr)
+                                end
+                            end
+                            #@constraint(m, conservation_flux_2_nr[k in Noeuds,  n in Noeuds;n!=k], sum(g[k,j=>n] for j in VoisinsFictif[n]) - sum(g[k,n=>j] for j in VoisinsFictif[n]) == 0)
                         end
-                    end
-
-                    Reserve = Noeuds[findall(x_val .== 1)]
-
-					Voisins_InReserve = Vector{Vector{Int}}()
-				    for k in Reserve
-				        push!(Voisins_InReserve, Vector{Int}())
-				    end
-
-				    cpt = 0
-				    for n1 in Reserve
-				        cpt = cpt+1
-				        for n2 in Voisins[n1]
-				            if sum(n2 .== Reserve) > 0
-				                push!(Voisins_InReserve[cpt],findall(n2 .== Reserve)[1])
-				            end
-				        end
-				    end
-				    dmin_in_reserve = shortest_distances(length(Reserve),Voisins_InReserve)
-					idx_source = findall(r_val .== 1)[1]
-					Reserve_TooFar = Reserve[findall(dmin_in_reserve[findall(idx_source .== Reserve)[1],:] .> Rmax)]
-
-                    if length(Reserve_TooFar) > 0
-						for k in intersect(Reserve_TooFar,Commodites)
-
-							#if (dmin_in_reserve[findall(idx_source .== Reserve)[1],findall(k .== Reserve)[1]] == maximum(dmin_in_reserve))
-
-								for i in NoeudsProche[k]
-									if dmin[k,i]==Rmax
-										continue
-									end
-									for j in Voisins[i]
-										flux_arc_1 = @build_constraint(f[k,i,j] <= u[i=>j])
-										MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_1)
-										flux_arc_2 = @build_constraint(f[k,i,j] <= x[k])
-										MOI.submit(m, MOI.LazyConstraint(cb_data),flux_arc_2)
-									end
-								end
-								source_k = @build_constraint(sum(f[k,k,j] for j in Voisins[k]) - sum(f[k,j,k] for j in Voisins[k]) == x[k]-r[k])
-								MOI.submit(m, MOI.LazyConstraint(cb_data), source_k)
-
-								for i in NoeudsProche[k]
-									if i==k
-										continue
-									end
-									if dmin[k,i] == Rmax
-										conservation_flux_1 = @build_constraint(sum(f[k,j,i] for j in VoisinsProche[k][i]) == r[i])
-										MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_1)
-									else
-										conservation_flux_1 = @build_constraint(sum(f[k,j,i] for j in VoisinsProche[k][i]) - sum(f[k,i,j] for j in VoisinsProche[k][i]) <= r[i])
-										MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_1)
-										conservation_flux_2 = @build_constraint(sum(f[k,j,i] for j in VoisinsProche[k][i]) - sum(f[k,i,j] for j in VoisinsProche[k][i]) >= 0)
-										MOI.submit(m, MOI.LazyConstraint(cb_data),conservation_flux_2)
-									end
-								end
-
-								rmax_inreserve = @build_constraint(sum(f[key] for key in eachindex(f) if key[1]==k) <= Rmax)
-								MOI.submit(m, MOI.LazyConstraint(cb_data),rmax_inreserve)
-							#end
-						end
                     end
                 end
             end
+        end
+        # Contrainte sur les variables de flux
+        if is_callbacks
             MOI.set(m, MOI.LazyConstraintCallback(), my_callback_function)
-
         else
-            @constraint(m, flux_arc_1[k in Commodites, d in Arcs], f[k,d] <= u[d])
-            @constraint(m, flux_arc_2[k in Commodites, d in Arcs], f[k,d] <= x[k])
-            @constraint(m, conservation_flux_1[k in Commodites, n in Noeuds;n!=k], sum(f[k,j=>n] for j in Voisins[n]) - sum(f[k,n=>j] for j in Voisins[n]) <= r[n])
-            @constraint(m, conservation_flux_2[k in Commodites, n in Noeuds;n!=k], sum(f[k,j=>n] for j in Voisins[n]) - sum(f[k,n=>j] for j in Voisins[n]) >= 0)
-            @constraint(m, source_k[k in Commodites], sum(f[k, k=>j] for j in Voisins[k]) - sum(f[k,j=>k] for j in Voisins[k]) == x[k]-r[k])
+            # # WARNING: this is not compatible with Rmax
+            # @constraint(m, flux_arc_1[k in Commodites, d in Arcs], f[k,d] <= u[d])
+            # @constraint(m, flux_arc_2[k in Commodites, d in Arcs], f[k,d] <= x[k])
+            # @constraint(m, conservation_flux_1[k in Commodites, n in Noeuds;n!=k], sum(f[k,j=>n] for j in Voisins[n]) - sum(f[k,n=>j] for j in Voisins[n]) <= r[n])
+            # @constraint(m, conservation_flux_2[k in Commodites, n in Noeuds;n!=k], sum(f[k,j=>n] for j in Voisins[n]) - sum(f[k,n=>j] for j in Voisins[n]) >= 0)
+            # @constraint(m, source_k[k in Commodites], sum(f[k, k=>j] for j in Voisins[k]) - sum(f[k,j=>k] for j in Voisins[k]) == x[k]-r[k])
 
-            if is_non_reserve
-                @constraint(m, flux_arc_1_nr[k in Commodites, d in union(Arcs,ArcsFictif)], g[k,d] <= v[d])
-                @constraint(m, flux_arc_2_nr[k in Commodites, d in union(Arcs,ArcsFictif)], g[k,d] <= 1-x[k]) # redondante ?
-                @constraint(m, conservation_flux_1_nr[k in Commodites], sum(g[k,alpha=>j] for j in VoisinsFictif[alpha]) - sum(g[k,j=>alpha] for j in VoisinsFictif[alpha]) <= 1)
-                @constraint(m, conservation_flux_2_nr[k in Commodites,  n in Noeuds;n!=k], sum(g[k,j=>n] for j in VoisinsFictif[n]) - sum(g[k,n=>j] for j in VoisinsFictif[n]) == 0)
-                @constraint(m, sink_k_nr[k in Commodites], sum(g[k, j=>k] for j in VoisinsFictif[k]) - sum(g[k,k=>j] for j in VoisinsFictif[k]) == 1 - x[k])
-            end
+            # if is_non_reserve
+            #     @constraint(m, flux_arc_1_nr[k in Commodites, d in union(Arcs,ArcsFictif)], g[k,d] <= v[d])
+            #     @constraint(m, flux_arc_2_nr[k in Commodites, d in union(Arcs,ArcsFictif)], g[k,d] <= 1-x[k]) # redondante ?
+            #     @constraint(m, conservation_flux_1_nr[k in Commodites], sum(g[k,alpha=>j] for j in VoisinsFictif[alpha]) - sum(g[k,j=>alpha] for j in VoisinsFictif[alpha]) <= 1)
+            #     @constraint(m, conservation_flux_2_nr[k in Commodites,  n in Noeuds;n!=k], sum(g[k,j=>n] for j in VoisinsFictif[n]) - sum(g[k,n=>j] for j in VoisinsFictif[n]) == 0)
+            #     @constraint(m, sink_k_nr[k in Commodites], sum(g[k, j=>k] for j in VoisinsFictif[k]) - sum(g[k,k=>j] for j in VoisinsFictif[k]) == 1 - x[k])
+            # end
         end
 
         return m
