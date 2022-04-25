@@ -2,127 +2,94 @@ root_dir=pwd();
 # ==============================================================================
 # 0 - PACKAGES
 # ==============================================================================
-    using DataFrames;
-    using LinearAlgebra;
-    using JuMP;
-    using Random;
-    using Gurobi;
-    using Graphs;
-    using GraphPlot;
-    using Plots;
-    using Cairo;
-    using Compose;
-    using MathOptInterface;
-    using CSV;
+using DataFrames;
+using LinearAlgebra;
+using JuMP;
+using Random;
+using Gurobi;
+using Graphs;
+using GraphPlot;
+using Plots;
+using Cairo;
+using Compose;
+using MathOptInterface;
+using CSV;
 
 # ==============================================================================
 # 1 - PARAMETERS
 # ==============================================================================
 
-    # Paramètre d'affichage
-    verbose = false
+# Paramètre d'affichage
+verbose = false
 
-    # Chargement des structures (paramètres, instance, grille, etc.)
-    println("MST_struct.jl ...");include("$(root_dir)/2_functions/MST_struct.jl");
+# Chargement des structures (paramètres, instance, grille, etc.)
+println("MST_struct.jl ...");include("$(root_dir)/2_functions/MST_struct.jl");
 
-    # Grille de taille Nx*Ny
-    Nx        = 12
-    Ny        = 7
-    # Compacité
-    beta      = 1
-    # Nombre de conservation features
-    spec_nb   = 3
-    # Graine pseudo-aléatoire
-    rand_seed = 1
-    # Méthode de résolution
-    is_beta        = false
-    is_non_reserve = true
-    is_callbacks   = true
-    is_damier      = true
-    is_rmax        = true
+# Grille de taille Nx*Ny
+Nx        = 12
+Ny        = 7
+# Compacité
+beta      = 1
+# Nombre de conservation features
+spec_nb   = 3
+# Graine pseudo-aléatoire
+rand_seed = 1
+# Méthode de résolution
+is_beta        = false
+is_non_reserve = true
+is_callbacks   = true
+is_damier      = true
+is_rmax        = true
+is_decompose   = false
 
-    # Divers
-    if is_rmax
-        Rmax = 3
-    else
-        Rmax = Nx + Ny
-    end
+# Divers
+if is_rmax
+    Rmax = 3
+else
+    Rmax = Nx + Ny
+end
 
-    #folder = "24x14_CF3_BLM0.5_fromfiles"
-    folder = "$(Nx)x$(Ny)_CF$(spec_nb)_BLM$(beta)"
-    params = Parameters(Nx,Ny,beta,spec_nb,rand_seed,is_non_reserve,is_callbacks,is_damier,is_rmax,Rmax)
+#folder = "24x14_CF3_BLM0.5_fromfiles"
+folder = "$(Nx)x$(Ny)_CF$(spec_nb)_BLM$(beta)"
+params = Parameters(beta,spec_nb,rand_seed,is_non_reserve,is_callbacks,is_damier,is_rmax,Rmax)
 
-    # Chargement des fonctions
-    println("MST_functions.jl ...");include("$(root_dir)/2_functions/MST_functions.jl");
+# Chargement des fonctions
+println("MST_functions.jl ...");include("$(root_dir)/2_functions/MST_functions.jl");
 
+# Données du graphe de la grille
+gridgraph = GridGraph(Nx, Ny)
 
-    # Données du graphe de la grille
-    gridgraph = GridGraph(params)
-    Noeuds              = gridgraph.Noeuds
-    Aretes              = gridgraph.Aretes
-    Voisins             = gridgraph.Voisins
-    Arcs                = gridgraph.Arcs
-    NoeudsPeripheriques = gridgraph.NoeudsPeripheriques
-    NoeudsFictif        = gridgraph.NoeudsFictif
-    AretesFictif        = gridgraph.AretesFictif
-    VoisinsFictif       = gridgraph.VoisinsFictif
-    ArcsFictif          = gridgraph.ArcsFictif
-    alpha               = gridgraph.alpha
-    N_noeuds            = length(Noeuds)
-    N_noeudsfictif      = length(NoeudsFictif)
-    N_aretes            = length(Aretes)
+instance = InstanceFromParams(params,gridgraph)
+#data_dir = "$(root_dir)/1_data/24x14_CF3_BLM0.5_fromfiles"
+#pu_fname     = "$(data_dir)/pu.csv"
+#cf_fname     = "$(data_dir)/cf.csv"
+#coords_fname = "$(data_dir)/coords.csv"
+#bound_fname  = "$(data_dir)/bound.csv"
+#instance = InstanceFromFiles(pu_fname,cf_fname,bound_fname,beta,[0.2,0.2,0.2],gridgraph)
 
+if verbose
     # Affichage des infos du graphe de la grille
-    if verbose
-        print_grid_graph(gridgraph)
-    end
-
-    instance = InstanceFromParams(params,gridgraph)
-    #data_dir = "$(root_dir)/1_data/24x14_CF3_BLM0.5_fromfiles"
-    #pu_fname     = "$(data_dir)/pu.csv"
-    #cf_fname     = "$(data_dir)/cf.csv"
-    #coords_fname = "$(data_dir)/coords.csv"
-    #bound_fname  = "$(data_dir)/bound.csv"
-    #instance = InstanceFromFiles(pu_fname,cf_fname,bound_fname,beta,[0.2,0.2,0.2],gridgraph)
-
-    ConservationFeatures = instance.ConservationFeatures
-    Amount               = instance.Amount
-    Cost                 = instance.Cost
-    Targets              = instance.Targets
-    Rentability          = instance.Rentability
-    BoundaryLength       = instance.BoundaryLength
-    BoundaryCorrection   = instance.BoundaryCorrection
-
+    print_grid_graph(gridgraph)
     # Affichage des infos de l'instance
-    if verbose
-        print_instance(instance,gridgraph)
-    end
-
-
-    # Infos du damier
-    damier = Damier(params)
-    NoeudsNoirs  = damier.Black
-    NoeudsBlancs = damier.White
-
+    print_instance(instance,gridgraph)
     # Affichage les infos du damier
-    if verbose
-        print_damier(damier)
-    end
-
+    print_damier(GridGraph.NoeudsNoirs, GridGraph.NoeudsBlancs)
+end
 
 
 # ==============================================================================
 # 2 - MODEL + SOLVING
 # ==============================================================================
 
-    # Chargement des modèles
-    println("MST_models.jl ...");include("$(root_dir)/2_functions/MST_models.jl");
+# Chargement des modèles
+println("MST_models.jl ...");include("$(root_dir)/2_functions/MST_models.jl");
 
-    res_dir = "$(root_dir)/3_results/$(folder)";
-    if !isdir(res_dir)
-        mkdir(res_dir);
-    end
+res_dir = "$(root_dir)/3_results/$(folder)";
+if !isdir(res_dir)
+    mkdir(res_dir);
+end
 
+if !is_decompose
     my_model = ReserveSiteSelection_SpatialConstraints(instance, gridgraph, params, is_beta, is_non_reserve, is_callbacks, is_damier, is_rmax)
     t1 = time_ns()
     optimize!(my_model)
@@ -142,3 +109,12 @@ root_dir=pwd();
     else
         visualisation_reserve_graph(x_opt,u_opt,r_opt,"/$(res_dir)/$(title).png",gridgraph)
     end
+else
+    dmin = shortest_distances(length(gridgraph.Noeuds),gridgraph.Voisins)
+    for i in gridgraph.Noeuds
+        # create one gridgraph and one instance for each node and set it as the center of the reserve
+    end
+    
+    
+end
+

@@ -6,7 +6,6 @@
         ## LECTURE DES DONNEES -------------------------------------------------
         Noeuds               = gridgraph.Noeuds
         Voisins              = gridgraph.Voisins
-        Aretes               = gridgraph.Aretes
         Arcs                 = gridgraph.Arcs
         NoeudsPeripheriques  = gridgraph.NoeudsPeripheriques
         N_noeuds             = length(Noeuds)
@@ -21,11 +20,9 @@
 
         if is_damier
             NoeudsNoirs  = gridgraph.NoeudsNoirs
-            NoeudsBlancs = gridgraph.NoeudsBlancs
         end
 
         if is_non_reserve
-            NoeudsFictif   = gridgraph.NoeudsFictif
             VoisinsFictif  = gridgraph.VoisinsFictif
             ArcsFictif     = gridgraph.ArcsFictif
             alpha          = gridgraph.alpha
@@ -200,7 +197,7 @@
                         println("cb: every commodity of the component has already been added")
                         continue
                     end 
-                    k = Component[findmax(Rentability[Component])[2][1]]
+                    k = Component[findmax(instance.Rentability[Component])[2][1]]
                     push!(Commodities_to_add, k)
                     push!(Commodites_choisies, k)
                     setdiff!(Commodites_restante, k)
@@ -305,7 +302,7 @@
                                 continue
                             end 
                             # choose commodity
-                            k = Component[findmin(Rentability[Component])[2][1]]
+                            k = Component[findmin(instance.Rentability[Component])[2][1]]
                             push!(Commodites_choisies_nr, k)
                             setdiff!(Commodites_restante_nr, k)
                             println("cb: chosen commodity $(k)")
