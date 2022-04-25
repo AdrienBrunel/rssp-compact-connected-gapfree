@@ -40,7 +40,7 @@ is_non_reserve = true
 is_callbacks   = true
 is_damier      = true
 is_rmax        = true
-is_decompose   = true
+is_decompose   = false
 
 # Divers
 if is_rmax
@@ -59,13 +59,13 @@ println("MST_functions.jl ...");include("$(root_dir)/2_functions/MST_functions.j
 # Données du graphe de la grille
 gridgraph = GridGraph(Nx, Ny)
 
-instance = InstanceFromParams(params,gridgraph)
+instance = Instance(params,gridgraph)
 #data_dir = "$(root_dir)/1_data/24x14_CF3_BLM0.5_fromfiles"
 #pu_fname     = "$(data_dir)/pu.csv"
 #cf_fname     = "$(data_dir)/cf.csv"
 #coords_fname = "$(data_dir)/coords.csv"
 #bound_fname  = "$(data_dir)/bound.csv"
-#instance = InstanceFromFiles(pu_fname,cf_fname,bound_fname,beta,[0.2,0.2,0.2],gridgraph)
+#instance = Instance(pu_fname,cf_fname,bound_fname,beta,[0.2,0.2,0.2],gridgraph)
 
 if verbose
     # Affichage des infos du graphe de la grille
@@ -118,7 +118,5 @@ else
         print(ballNodes)
         print(ballGraph)
     end
-    
-    
 end
 

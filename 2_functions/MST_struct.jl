@@ -162,7 +162,7 @@ end
 # ==============================================================================
 # 3 - INSTANCE
 # ==============================================================================
-struct InstanceFromParams
+struct Instance
     N_pu::Int64 #
     N_cf::Int64 #
     N_bd::Int64 #
@@ -176,154 +176,136 @@ struct InstanceFromParams
     BoundaryCorrection::Array{Float64,2}
     Beta::Float64
     IsLockedOut::Array{Int8,2}
-    
-    
-    # Fonction d'habillage de l'instance
-    function InstanceFromParams(params,gridgraph)
-        
-        # Parameters
-        beta      = params.beta
-        N_cf      = params.spec_nb
-        rand_seed = params.rand_seed
-        
-        # Données du graphe de la grille
-        N_pu                = gridgraph.Nx * gridgraph.Ny
-        Noeuds              = gridgraph.Noeuds
-        Voisins             = gridgraph.Voisins
-        Arcs                = gridgraph.Arcs
-        NoeudsPeripheriques = gridgraph.NoeudsPeripheriques
-        N_noeuds = length(Noeuds)
-        PlanningUnits = Noeuds
-        N_bd = length(Arcs)
-        
-        # Quantité de chaque élément i dans chaque noeud j
-        Random.seed!(rand_seed)
-        ConservationFeatures = collect(1:N_cf)
-        Amount = zeros(N_cf,N_noeuds)
-        for i in ConservationFeatures
-            for j in Noeuds
-                Amount[i,j] = rand(0:5)
-            end
-        end
-        
-        # Coût de chaque noeud j
-        Cost = zeros(N_noeuds,1)
-        IsLockedOut = zeros(N_pu,1)
-        for j in Noeuds
-            Cost[j] = rand(1:5)
-        end
-        
-        # La réserve doit recouvrir chaque élément i dans le respect des quantités cibles
-        Targets = zeros(N_cf,1)
-        for i in ConservationFeatures
-            Targets[i] = 0.2*sum(Amount[i,:])
-        end
-        
-        # Calcul de la rentabilité d'une cellule
-        Rentability = zeros(N_noeuds,1)
-        for j in Noeuds
-            Rentability[j] = sum(Amount[i,j]/Targets[i] for i in ConservationFeatures)/Cost[j]
-        end
-        
-        # Longueur de chaque arcs
-        BoundaryLength = Dict{Pair{Int,Int},Int}()
-        for d in Arcs
-            BoundaryLength[d] = 1
-        end
-        
-        # Correction
-        BoundaryCorrection = zeros(N_noeuds,1)
-        for j in NoeudsPeripheriques
-            BoundaryCorrection[j] = 4 - length(Voisins[j])
-        end
-        
-        new(N_pu,N_cf,N_bd,PlanningUnits,ConservationFeatures,Cost,Amount,Targets,Rentability,BoundaryLength,BoundaryCorrection,beta,IsLockedOut)
-        
-    end
 end
 
-struct InstanceFromFiles
-    N_pu::Int64 #
-    N_cf::Int64 #
-    N_bd::Int64 #
-    PlanningUnits::Array{Int64,1}
-    ConservationFeatures::Array{Int64,1}
-    Cost::Array{Float64,2}
-    Amount::Array{Float64,2}
-    Targets::Array{Float64,2}
-    Rentability::Array{Float64,2}
-    BoundaryLength::Dict{Pair{Int,Int},Int}
-    BoundaryCorrection::Array{Float64,2}
-    Beta::Float64
-    IsLockedOut::Array{Int8,2}
+# Fonction d'habillage de l'instance
+function Instance(params,gridgraph)
     
-    # input data initialisation
-    function InstanceFromFiles(pu_fname,cf_fname,bound_fname,beta,targets,gridgraph)
-        
-        # Check if the input data files exist
-        for f in [pu_fname,cf_fname,bound_fname]
-            if !isfile(f)
-                println("WARNING! File $(f) is missing")
-            end
-        end
-        
-        # Data of the graph associated with the grid
-        Voisins             = gridgraph.Voisins
-        NoeudsPeripheriques = gridgraph.NoeudsPeripheriques
-        
-        # Read input files
-        pu_data    = CSV.read(pu_fname, header=1, delim=",")
-        cf_data    = CSV.read(cf_fname, header=1, delim=",")
-        bound_data = CSV.read(bound_fname, header=1, delim=",")
-        
-        # Problem size
-        N_pu = length(pu_data.id)
-        N_cf = length(targets)
-        N_bd = length(bound_data.boundary)
-        
-        # Problem ranges
-        PlanningUnits = collect(1:N_pu)
-        ConservationFeatures = collect(1:N_cf)
-        
-        # Cost and status of planning units
-        Cost = zeros(N_pu,1)
-        IsLockedOut = zeros(N_pu,1)
-        #LockedOut = Vector{Int64}()
-        for j in 1:N_pu
-            Cost[j,1] = pu_data.cost[j]
-            IsLockedOut[j,1] = pu_data.is_locked_out[j]
-        end
-        
-        # Amount and targets of conservation features
-        Amount = zeros(N_cf,N_pu)
-        Targets = zeros(N_cf,1)
-        for i in 1:N_cf
-            Amount[i,1:N_pu] = cf_data[:,i+1]
-            Targets[i,1] = targets[i] * sum(Amount[i,1:N_pu] .* (1 .- IsLockedOut))
-        end
-        
-        # Calcul de la rentabilité d'une cellule
-        Rentability = zeros(N_noeuds,1)
+    # Parameters
+    beta      = params.beta
+    N_cf      = params.spec_nb
+    rand_seed = params.rand_seed
+    
+    # Données du graphe de la grille
+    N_pu                = gridgraph.Nx * gridgraph.Ny
+    Noeuds              = gridgraph.Noeuds
+    Voisins             = gridgraph.Voisins
+    Arcs                = gridgraph.Arcs
+    NoeudsPeripheriques = gridgraph.NoeudsPeripheriques
+    N_noeuds = length(Noeuds)
+    PlanningUnits = Noeuds
+    N_bd = length(Arcs)
+    
+    # Quantité de chaque élément i dans chaque noeud j
+    Random.seed!(rand_seed)
+    ConservationFeatures = collect(1:N_cf)
+    Amount = zeros(N_cf,N_noeuds)
+    for i in ConservationFeatures
         for j in Noeuds
-            Rentability[j] = sum(Amount[i,j]/Targets[i] for i in ConservationFeatures)/Cost[j]
+            Amount[i,j] = rand(0:5)
         end
-        
-        # Boundary length of vertices between two nodes
-        BoundaryLength = Dict{Pair{Int,Int},Int}()
-        for i in 1:N_bd
-            BoundaryLength[bound_data.id1[i]=>bound_data.id2[i]] = bound_data.boundary[i]
-            BoundaryLength[bound_data.id2[i]=>bound_data.id1[i]] = bound_data.boundary[i]
-        end
-        
-        # Correction
-        BoundaryCorrection = zeros(N_pu,1)
-        for j in NoeudsPeripheriques
-            BoundaryCorrection[j] = 4 - length(Voisins[j])
-        end
-        
-        # constructor
-        new(N_pu,N_cf,N_bd,PlanningUnits,ConservationFeatures,Cost,Amount,Targets,Rentability,BoundaryLength,BoundaryCorrection,beta,IsLockedOut)
-        
     end
+    
+    # Coût de chaque noeud j
+    Cost = zeros(N_noeuds,1)
+    IsLockedOut = zeros(N_pu,1)
+    for j in Noeuds
+        Cost[j] = rand(1:5)
+    end
+    
+    # La réserve doit recouvrir chaque élément i dans le respect des quantités cibles
+    Targets = zeros(N_cf,1)
+    for i in ConservationFeatures
+        Targets[i] = 0.2*sum(Amount[i,:])
+    end
+    
+    # Calcul de la rentabilité d'une cellule
+    Rentability = zeros(N_noeuds,1)
+    for j in Noeuds
+        Rentability[j] = sum(Amount[i,j]/Targets[i] for i in ConservationFeatures)/Cost[j]
+    end
+    
+    # Longueur de chaque arcs
+    BoundaryLength = Dict{Pair{Int,Int},Int}()
+    for d in Arcs
+        BoundaryLength[d] = 1
+    end
+    
+    # Correction
+    BoundaryCorrection = zeros(N_noeuds,1)
+    for j in NoeudsPeripheriques
+        BoundaryCorrection[j] = 4 - length(Voisins[j])
+    end
+    
+    return Instance(N_pu,N_cf,N_bd,PlanningUnits,ConservationFeatures,Cost,Amount,Targets,Rentability,BoundaryLength,BoundaryCorrection,beta,IsLockedOut)
+    
+end
+
+function Instance(pu_fname,cf_fname,bound_fname,beta,targets,gridgraph)
+        
+    # Check if the input data files exist
+    for f in [pu_fname,cf_fname,bound_fname]
+        if !isfile(f)
+            println("WARNING! File $(f) is missing")
+        end
+    end
+    
+    # Data of the graph associated with the grid
+    Voisins             = gridgraph.Voisins
+    NoeudsPeripheriques = gridgraph.NoeudsPeripheriques
+    
+    # Read input files
+    pu_data    = CSV.read(pu_fname, header=1, delim=",")
+    cf_data    = CSV.read(cf_fname, header=1, delim=",")
+    bound_data = CSV.read(bound_fname, header=1, delim=",")
+    
+    # Problem size
+    N_pu = length(pu_data.id)
+    N_cf = length(targets)
+    N_bd = length(bound_data.boundary)
+    
+    # Problem ranges
+    PlanningUnits = collect(1:N_pu)
+    ConservationFeatures = collect(1:N_cf)
+    
+    # Cost and status of planning units
+    Cost = zeros(N_pu,1)
+    IsLockedOut = zeros(N_pu,1)
+    #LockedOut = Vector{Int64}()
+    for j in 1:N_pu
+        Cost[j,1] = pu_data.cost[j]
+        IsLockedOut[j,1] = pu_data.is_locked_out[j]
+    end
+    
+    # Amount and targets of conservation features
+    Amount = zeros(N_cf,N_pu)
+    Targets = zeros(N_cf,1)
+    for i in 1:N_cf
+        Amount[i,1:N_pu] = cf_data[:,i+1]
+        Targets[i,1] = targets[i] * sum(Amount[i,1:N_pu] .* (1 .- IsLockedOut))
+    end
+    
+    # Calcul de la rentabilité d'une cellule
+    Rentability = zeros(N_noeuds,1)
+    for j in Noeuds
+        Rentability[j] = sum(Amount[i,j]/Targets[i] for i in ConservationFeatures)/Cost[j]
+    end
+    
+    # Boundary length of vertices between two nodes
+    BoundaryLength = Dict{Pair{Int,Int},Int}()
+    for i in 1:N_bd
+        BoundaryLength[bound_data.id1[i]=>bound_data.id2[i]] = bound_data.boundary[i]
+        BoundaryLength[bound_data.id2[i]=>bound_data.id1[i]] = bound_data.boundary[i]
+    end
+    
+    # Correction
+    BoundaryCorrection = zeros(N_pu,1)
+    for j in NoeudsPeripheriques
+        BoundaryCorrection[j] = 4 - length(Voisins[j])
+    end
+    
+    # constructor
+    return Instance(N_pu,N_cf,N_bd,PlanningUnits,ConservationFeatures,Cost,Amount,Targets,Rentability,BoundaryLength,BoundaryCorrection,beta,IsLockedOut)
+    
 end
 
