@@ -40,7 +40,7 @@ is_non_reserve = true
 is_callbacks   = true
 is_damier      = true
 is_rmax        = true
-is_decompose   = false
+is_decompose   = true
 
 # Divers
 if is_rmax
@@ -116,6 +116,7 @@ else
         # create one gridgraph and one instance for each node and set it as the center of the reserve
         ballNodes, ballGraph = get_subgraph_from_center(gridgraph, i, Rmax, dmin)
         print(ballNodes)
+        print(ballGraph)
     end
     
     
