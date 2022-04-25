@@ -29,12 +29,10 @@ end
     * `Nx::Int`: Maximum abscissa of a node of the graph
     * `Ny::Int`: Maximum ordinate of a node of the graph
     * `Noeuds::Vector{Int}`:
-    * `Aretes::Vector{Pair{Int,Int}}`:
     * `Voisins::Vector{Vector{Int}}`:
     * `Arcs::Vector{Pair{Int,Int}}`:
     * `NoeudsPeripheriques::Vector{Int}`:
     * `NoeudsFictif::Vector{Int}`:
-    * `AretesFictif::Vector{Pair{Int,Int}}`:
     * `VoisinsFictif::Vector{Vector{Int}}`:
     * `ArcsFictif::Vector{Pair{Int,Int}}`:
     * `alpha::Int64`:
@@ -45,12 +43,10 @@ struct GridGraph
     Nx::Int
     Ny::Int
     Noeuds::Vector{Int}
-    Aretes::Vector{Pair{Int,Int}}
     Voisins::Vector{Vector{Int}}
     Arcs::Vector{Pair{Int,Int}}
     NoeudsPeripheriques::Vector{Int}
     NoeudsFictif::Vector{Int}
-    AretesFictif::Vector{Pair{Int,Int}}
     VoisinsFictif::Vector{Vector{Int}}
     ArcsFictif::Vector{Pair{Int,Int}}
     alpha::Int64
@@ -66,89 +62,69 @@ struct GridGraph
         # Noeud fictif
         alpha = Nx*Ny+1;
         
-        # Liste des voisins pour chaque noeud
+        # Liste des voisins pour chaque noeud de la grille de taille Nx*Ny
         Voisins = Vector{Vector{Int}}()
-        for k in Noeuds
+        for _ in Noeuds
             push!(Voisins, Vector{Int}())
         end
-        
-        # Arêtes du graphe associé à la grille de taille Nx*Ny
-        Aretes = Vector{Pair{Int,Int}}()
-        for k in Noeuds
+        for i in Noeuds
             # arêtes horizontales
-            if mod(k,Nx) != 0
-                push!(Aretes,(k=>k+1))
-                push!(Voisins[k], k+1)
-                push!(Voisins[k+1], k)
+            if mod(i,Nx) != 0
+                push!(Voisins[i], i+1)
+                push!(Voisins[i+1], i)
             end
             # arêtes verticales
-            if k <= (Ny-1)*Nx
-                push!(Aretes,(k=>k+Nx))
-                push!(Voisins[k], k+Nx)
-                push!(Voisins[k+Nx], k)
+            if i <= (Ny-1)*Nx
+                push!(Voisins[i], i+Nx)
+                push!(Voisins[i+Nx], i)
             end
         end
-        
+                
         # Arcs du graphe associé à la grille de taille Nx*Ny
         Arcs = Vector{Pair{Int,Int}}()
-        for a in Aretes
-            push!(Arcs,a[1]=>a[2])
-            push!(Arcs,a[2]=>a[1])
+        for i in Noeuds
+            for j in Voisins[i]
+                push!(Arcs,i=>j)
+            end
         end
         
         # Noeuds périphériques du graphe
         NoeudsPeripheriques = Vector{Int64}()
-        for k in Noeuds
-            if length(Voisins[k]) < 4
-                push!(NoeudsPeripheriques,k)
+        for i in Noeuds
+            if length(Voisins[i]) < 4
+                push!(NoeudsPeripheriques,i)
             end
         end
         
         # Arêtes du graphe associé à la grille de taille Nx*Ny
-        AretesFictif = Vector{Pair{Int,Int}}()
-        for k in NoeudsPeripheriques
-            # arêtes noeuds fictif avec les noeuds périphériques
-            push!(AretesFictif,(alpha=>k))
-        end
-        
-        # Liste des voisins pour chaque noeud
-        VoisinsFictif = Vector{Vector{Int}}()
-        for k in NoeudsFictif
-            push!(VoisinsFictif, Vector{Int}())
-        end
-        
-        for k in Noeuds
-            # arêtes horizontales
-            if mod(k,Nx) != 0
-                push!(VoisinsFictif[k], k+1)
-                push!(VoisinsFictif[k+1], k)
-            end
-            # arêtes verticales
-            if k <= (Ny-1)*Nx
-                push!(VoisinsFictif[k], k+Nx)
-                push!(VoisinsFictif[k+Nx], k)
-            end
-            
-            # arêtes noeuds fictif avec les noeuds périphériques
-            if sum(findall(NoeudsPeripheriques .== k))>0
-                push!(VoisinsFictif[k], alpha)
-                push!(VoisinsFictif[alpha], k)
-            end
-        end
-        
-        # Arcs du graphe associé à la grille de taille Nx*Ny
         ArcsFictif = Vector{Pair{Int,Int}}()
-        for a in AretesFictif
-            push!(ArcsFictif,a[1]=>a[2])
-            push!(ArcsFictif,a[2]=>a[1])
+        for i in NoeudsPeripheriques
+            # arêtes noeuds fictif avec les noeuds périphériques
+            push!(ArcsFictif,(alpha=>i))
+            push!(ArcsFictif,(i=>alpha))
         end
+        
+        # Liste des voisins pour chaque noeud y compris le noeud fictif
+        VoisinsFictif = Vector{Vector{Int}}()
+        for i in Noeuds
+            push!(VoisinsFictif, Vector{Int}())
+            for j in  Voisins[i]
+                push!(VoisinsFictif[i], j)
+            end
+        end
+        push!(VoisinsFictif, Vector{Int}())
+        for i in NoeudsPeripheriques
+            push!(VoisinsFictif[i], alpha)
+            push!(VoisinsFictif[alpha], i)
+        end
+
         
         # Noeuds noirs et blanc du damier
         damier = Damier(Nx, Ny)
         NoeudsNoirs  = damier.Black
         NoeudsBlancs = damier.White
         
-        new(Nx, Ny, Noeuds,Aretes,Voisins,Arcs,NoeudsPeripheriques,NoeudsFictif,AretesFictif,VoisinsFictif,ArcsFictif,alpha,NoeudsNoirs,NoeudsBlancs)
+        new(Nx, Ny, Noeuds,Voisins,Arcs,NoeudsPeripheriques,NoeudsFictif,VoisinsFictif,ArcsFictif,alpha,NoeudsNoirs,NoeudsBlancs)
     end
 end
 
@@ -306,9 +282,9 @@ struct InstanceFromFiles
         
         # Boundary length of vertices between two nodes
         BoundaryLength = Dict{Pair{Int,Int},Int}()
-        for k in 1:N_bd
-            BoundaryLength[bound_data.id1[k]=>bound_data.id2[k]] = bound_data.boundary[k]
-            BoundaryLength[bound_data.id2[k]=>bound_data.id1[k]] = bound_data.boundary[k]
+        for i in 1:N_bd
+            BoundaryLength[bound_data.id1[i]=>bound_data.id2[i]] = bound_data.boundary[i]
+            BoundaryLength[bound_data.id2[i]=>bound_data.id1[i]] = bound_data.boundary[i]
         end
         
         # Correction
@@ -340,23 +316,23 @@ struct Damier
         
         # Damier
         num_ligne = 0
-        for k in 1:(Nx*Ny)
-            if mod(k,Nx) == 0
+        for i in 1:(Nx*Ny)
+            if mod(i,Nx) == 0
                 num_colonne = Nx
             else
-                num_colonne = mod(k,Nx)
+                num_colonne = mod(i,Nx)
             end
             
-            if mod(k,Nx) == 1
+            if mod(i,Nx) == 1
                 num_ligne = num_ligne + 1
             end
             
-            IsBlack[k] = 0
+            IsBlack[i] = 0
             if mod(num_ligne,2) == mod(num_colonne,2)
-                IsBlack[k] = 1
-                push!(Black,k)
+                IsBlack[i] = 1
+                push!(Black,i)
             else
-                push!(White,k)
+                push!(White,i)
             end
         end
         

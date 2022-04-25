@@ -8,24 +8,20 @@ function print_grid_graph(gridgraph)
     
     # Données du graphe de la grille
     Noeuds              = gridgraph.Noeuds
-    Aretes              = gridgraph.Aretes
     Voisins             = gridgraph.Voisins
     Arcs                = gridgraph.Arcs
     NoeudsPeripheriques = gridgraph.NoeudsPeripheriques
     NoeudsFictif        = gridgraph.NoeudsFictif
-    AretesFictif        = gridgraph.AretesFictif
     VoisinsFictif       = gridgraph.VoisinsFictif
     ArcsFictif          = gridgraph.ArcsFictif
     alpha               = gridgraph.alpha
     
     # Affichage
     println("Listes de $(length(Noeuds)) noeuds : $Noeuds")
-    println("Liste des $(length(Aretes)) arêtes: $Aretes")
     println("Listes des voisins : $Voisins")
     println("Liste des $(length(Arcs)) arcs: $Arcs")
     println("Liste des $(length(NoeudsPeripheriques)) noeuds périphériques: $NoeudsPeripheriques")
     println("Listes de $(length(NoeudsFictif)) noeuds : $NoeudsFictif")
-    println("Liste des $(length(AretesFictif)) arêtes: $AretesFictif")
     println("Listes des voisins fictifs : $VoisinsFictif")
     println("Liste des $(length(ArcsFictif)) arcs: $ArcsFictif")
     println("Le noeud fictif est le noeud $alpha")
@@ -603,44 +599,92 @@ end
 """
     get_subgraph_from_center(gridgraph::GridGraph, center::Int, R::Int)
 
-    Return a subgraph centered on node center with radius R and the list of nodes of the graph
+    Return the sub-gridgraph consisting of the ball centered on node center with radius R, and the list of nodes of the subgraph
 """
 function get_subgraph_from_center(gridgraph::GridGraph, center::Int, R::Int, dmin::Array{Int,2})
-# Reserve = Noeuds[findall(x_val .== 1)]
-                
-#                 # for each node of the reserve, compute its neighbors in the reserve
-#                 Voisins_InReserve = Vector{Vector{Int}}()
-#                 for i in 1:length(Reserve)
-#                     push!(Voisins_InReserve, Vector{Int}())
-#                     n1 = Reserve[i]
-#                     for n2 in  Reserve
-#                         if n2 ∈ Voisins[n1]
-#                             push!(Voisins_InReserve[i], findfirst(Reserve .== n2))
-#                         end
-#                     end
-#                 end
+    # ballNodes =findall(dmin[center,:] .<= R)
+    # N_ballNodes = length(ballNodes)
 
-#                 # get minimum pairwise distances
-#                 dmin_in_reserve = shortest_distances(length(Reserve),Voisins_InReserve)
-#                 # get true center of reserve: it is the node whose maximum distance from other nodes is smallest
-#                 max_dmin = maximum(dmin_in_reserve, dims = 2)
-#                 (radius, center) = findmin(max_dmin)
-#                 center = center[1]
-#                 # add the commodities of nodes that are too far away from true center
-#                 # WARNING: possible bug here if all the commodities far from the center are already added
-#                 if radius > Rmax
-#                     println("cb: center is $(Reserve[center]) and radius is $radius")
-#                     for k in Reserve[findall(dmin_in_reserve[center,:] .== radius)]
-#                         if k ∈ Commodites_choisies
-#                             continue
-#                         else
-#                             push!(Commodites_choisies, k)
-#                             setdiff!(Commodites_restante, k)
-#                             println("cb: node $k too far away, add commodity")
-#                             push!(Commodities_to_add, k)
-#                             break
-#                         end
-#                     end
-#                 end 
+    # # Noeud fictif
+    # ball_NoeudsFictif = 1:(N_ballNodes+1)
+    # ball_alpha = N_ballNodes + 1
+
+    
+    # # for each node of the ball, compute its neighbors in the ball
+    # ballVoisins = Vector{Vector{Int}}()
+    # for i in ballNodes
+    #     push!(ballVoisins, Vector{Int}())
+    #     for j in  gridgraph.Voisins[i]
+    #         if dmin[center, j] <= R
+    #             push!(ballVoisins[i], findfirst(ballNodes .== j))
+    #         end
+    #     end
+    # end
+
+
+    # ballPeripheriques = Vector{Int}()
+    # for i in gridgraph.NoeudsPeripheriques
+
+        
+    #     # Liste des voisins pour chaque noeud de la grille de taille Nx*Ny
+    #     Voisins = Vector{Vector{Int}}()
+    #     for k in Noeuds
+    #         push!(Voisins, Vector{Int}())
+    #         # arêtes horizontales
+    #         if mod(k,Nx) != 0
+    #             push!(Voisins[k], k+1)
+    #             push!(Voisins[k+1], k)
+    #         end
+    #         # arêtes verticales
+    #         if k <= (Ny-1)*Nx
+    #             push!(Voisins[k], k+Nx)
+    #             push!(Voisins[k+Nx], k)
+    #         end
+    #     end
+                
+    #     # Arcs du graphe associé à la grille de taille Nx*Ny
+    #     Arcs = Vector{Pair{Int,Int}}()
+    #     for i in Noeuds
+    #         for j in Voisins[i]
+    #             push!(Arcs,i=>j)
+    #         end
+    #     end
+        
+    #     # Noeuds périphériques du graphe
+    #     NoeudsPeripheriques = Vector{Int64}()
+    #     for k in Noeuds
+    #         if length(Voisins[k]) < 4
+    #             push!(NoeudsPeripheriques,k)
+    #         end
+    #     end
+        
+    #     # Arêtes du graphe associé à la grille de taille Nx*Ny
+    #     ArcsFictif = Vector{Pair{Int,Int}}()
+    #     for k in NoeudsPeripheriques
+    #         # arêtes noeuds fictif avec les noeuds périphériques
+    #         push!(ArcsFictif,(alpha=>k))
+    #         push!(ArcsFictif,(k=>alpha))
+    #     end
+        
+    #     # Liste des voisins pour chaque noeud y compris le noeud fictif
+    #     VoisinsFictif = Vector{Vector{Int}}()
+    #     for i in Noeuds
+    #         push!(VoisinsFictif, Vector{Int}())
+    #         for j in  Voisins[i]
+    #             push!(VoisinsFictif[i], j)
+    #         end
+    #     end
+    #     push!(VoisinsFictif, Vector{Int}())
+    #     for i in NoeudsPeripheriques
+    #         push!(VoisinsFictif[i], alpha)
+    #         push!(VoisinsFictif[alpha], i)
+    #     end
+
+        
+    #     # Noeuds noirs et blanc du damier
+    #     damier = Damier(Nx, Ny)
+    #     NoeudsNoirs  = damier.Black
+    #     NoeudsBlancs = damier.White
+
 end
 
