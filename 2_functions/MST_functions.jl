@@ -32,7 +32,6 @@ end
 function print_instance(instance,gridgraph)
     
     # Données de l'instance
-    ConservationFeatures = instance.ConservationFeatures
     Amount               = instance.Amount
     Cost                 = instance.Cost
     Targets              = instance.Targets
@@ -364,11 +363,9 @@ function print_info_reserve(x_opt,instance,gridgraph)
     # Lecture données du graphe de la grille
     Noeuds              = gridgraph.Noeuds
     Voisins             = gridgraph.Voisins
-    NoeudsPeripheriques = gridgraph.NoeudsPeripheriques
     N_noeuds = length(Noeuds)
     
     # Lecture données de l'instance
-    ConservationFeatures = instance.ConservationFeatures
     Amount               = instance.Amount
     Cost                 = instance.Cost
     Targets              = instance.Targets
@@ -378,7 +375,7 @@ function print_info_reserve(x_opt,instance,gridgraph)
     # variable de sélection des noeuds de la reserve
     println("La réserve est composée des noeuds $(Noeuds[x_opt[Noeuds] .== 1])")
     println("La réserve coûte $(sum(Cost[x_opt[Noeuds] .== 1]))")
-    for i in ConservationFeatures
+    for i in 1:instance.N_cf 
         println("La réserve contient $(sum(Amount[i,x_opt[Noeuds] .== 1])) de l'espèce $i dont la cible est $(Targets[i])")
     end
     

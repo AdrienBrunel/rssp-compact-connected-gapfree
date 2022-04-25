@@ -40,7 +40,7 @@ is_non_reserve = true
 is_callbacks   = true
 is_damier      = true
 is_rmax        = true
-is_decompose   = false
+is_decompose   = true
 
 # Divers
 if is_rmax
@@ -115,8 +115,38 @@ else
     for i in 1:1 #gridgraph.Noeuds
         # create one gridgraph and one instance for each node and set it as the center of the reserve
         ballNodes, ballGraph = get_subgraph_from_center(gridgraph, i, Rmax, dmin)
-        print(ballNodes)
-        print(ballGraph)
+        # print(ballNodes)
+        # print(ballGraph)
+        # Quantité de chaque élément i dans chaque noeud j
+        N_cf = instance.N_cf
+        ballAmount = zeros(N_cf, length(ballNodes))
+        for i in 1:N_cf
+            ballAmount[i,:] = instance.Amount[i,ballNodes]
+        end
+        println(ballAmount)
+        Targets = instance.Targets
+
+        # test the capacity of the ball to satisfy all constraints
+        totalAmount = sum(ballAmount, dims=2)
+        println("Total amout in ball = $(totalAmount[:,1])")
+        println("Targets = $Targets")
+        println("Is it ok ? ", totalAmount[:,1] .>= Targets)
+
+
+        # define the remaining data of the subgraph
+        ballCost = instance.Cost[ballNodes]
+        ballLockedOut = instance.IsLockedOut[ballNodes]
+        ballRentability = instance.Rentability[ballNodes]
+        ballBoundaryLength = Dict{Pair{Int,Int},Int}()
+        for d in ballGraph.Arcs
+            ballBoundaryLength[d] = instance.BoundaryLength[ballNodes[d[1]]=>ballNodes[d[2]]]
+        end
+        ballBoundaryCorrection = zeros(length(ballNodes))
+        for i in ballGraph.NoeudsPeripheriques
+            ballBoundaryCorrection[i] = 4 - length(ballGraph.Voisins[i])
+        end
+
+        # ballInstance = Instance(length(ballNodes),instance.N_cf,instance.N_bd,ballGraph.Noeuds,instance.ConservationFeatures,ballCost,ballAmount,Targets,ballRentability,ballBoundaryLength,ballBoundaryCorrection,instance.Beta,ballLockedOut)
     end
 end
 

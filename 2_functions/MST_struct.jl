@@ -166,14 +166,14 @@ struct Instance
     N_pu::Int64 #
     N_cf::Int64 #
     N_bd::Int64 #
-    PlanningUnits::Array{Int64,1}
-    ConservationFeatures::Array{Int64,1}
-    Cost::Array{Float64,2}
-    Amount::Array{Float64,2}
-    Targets::Array{Float64,2}
-    Rentability::Array{Float64,2}
+    PlanningUnits::Vector{Int64}
+    ConservationFeatures::Vector{Int64}
+    Cost::Vector{Float64}
+    Amount::Matrix{Float64}
+    Targets::Vector{Float64}
+    Rentability::Vector{Float64}
     BoundaryLength::Dict{Pair{Int,Int},Int}
-    BoundaryCorrection::Array{Float64,2}
+    BoundaryCorrection::Vector{Float64}
     Beta::Float64
     IsLockedOut::Array{Int8,2}
 end
@@ -207,20 +207,20 @@ function Instance(params,gridgraph)
     end
     
     # Coût de chaque noeud j
-    Cost = zeros(N_noeuds,1)
+    Cost = zeros(N_noeuds)
     IsLockedOut = zeros(N_pu,1)
     for j in Noeuds
         Cost[j] = rand(1:5)
     end
     
     # La réserve doit recouvrir chaque élément i dans le respect des quantités cibles
-    Targets = zeros(N_cf,1)
+    Targets = zeros(N_cf)
     for i in ConservationFeatures
         Targets[i] = 0.2*sum(Amount[i,:])
     end
     
     # Calcul de la rentabilité d'une cellule
-    Rentability = zeros(N_noeuds,1)
+    Rentability = zeros(N_noeuds)
     for j in Noeuds
         Rentability[j] = sum(Amount[i,j]/Targets[i] for i in ConservationFeatures)/Cost[j]
     end
@@ -232,7 +232,7 @@ function Instance(params,gridgraph)
     end
     
     # Correction
-    BoundaryCorrection = zeros(N_noeuds,1)
+    BoundaryCorrection = zeros(N_noeuds)
     for j in NoeudsPeripheriques
         BoundaryCorrection[j] = 4 - length(Voisins[j])
     end
@@ -269,24 +269,24 @@ function Instance(pu_fname,cf_fname,bound_fname,beta,targets,gridgraph)
     ConservationFeatures = collect(1:N_cf)
     
     # Cost and status of planning units
-    Cost = zeros(N_pu,1)
-    IsLockedOut = zeros(N_pu,1)
+    Cost = zeros(N_pu)
+    IsLockedOut = zeros(N_pu)
     #LockedOut = Vector{Int64}()
     for j in 1:N_pu
-        Cost[j,1] = pu_data.cost[j]
-        IsLockedOut[j,1] = pu_data.is_locked_out[j]
+        Cost[j] = pu_data.cost[j]
+        IsLockedOut[j] = pu_data.is_locked_out[j]
     end
     
     # Amount and targets of conservation features
     Amount = zeros(N_cf,N_pu)
-    Targets = zeros(N_cf,1)
+    Targets = zeros(N_cf)
     for i in 1:N_cf
         Amount[i,1:N_pu] = cf_data[:,i+1]
-        Targets[i,1] = targets[i] * sum(Amount[i,1:N_pu] .* (1 .- IsLockedOut))
+        Targets[i] = targets[i] * sum(Amount[i,1:N_pu] .* (1 .- IsLockedOut))
     end
     
     # Calcul de la rentabilité d'une cellule
-    Rentability = zeros(N_noeuds,1)
+    Rentability = zeros(N_noeuds)
     for j in Noeuds
         Rentability[j] = sum(Amount[i,j]/Targets[i] for i in ConservationFeatures)/Cost[j]
     end
@@ -299,7 +299,7 @@ function Instance(pu_fname,cf_fname,bound_fname,beta,targets,gridgraph)
     end
     
     # Correction
-    BoundaryCorrection = zeros(N_pu,1)
+    BoundaryCorrection = zeros(N_pu)
     for j in NoeudsPeripheriques
         BoundaryCorrection[j] = 4 - length(Voisins[j])
     end
