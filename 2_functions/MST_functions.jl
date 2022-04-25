@@ -11,7 +11,6 @@ function print_grid_graph(gridgraph)
     Voisins             = gridgraph.Voisins
     Arcs                = gridgraph.Arcs
     NoeudsPeripheriques = gridgraph.NoeudsPeripheriques
-    NoeudsFictif        = gridgraph.NoeudsFictif
     VoisinsFictif       = gridgraph.VoisinsFictif
     ArcsFictif          = gridgraph.ArcsFictif
     alpha               = gridgraph.alpha
@@ -21,7 +20,6 @@ function print_grid_graph(gridgraph)
     println("Listes des voisins : $Voisins")
     println("Liste des $(length(Arcs)) arcs: $Arcs")
     println("Liste des $(length(NoeudsPeripheriques)) noeuds périphériques: $NoeudsPeripheriques")
-    println("Listes de $(length(NoeudsFictif)) noeuds : $NoeudsFictif")
     println("Listes des voisins fictifs : $VoisinsFictif")
     println("Liste des $(length(ArcsFictif)) arcs: $ArcsFictif")
     println("Le noeud fictif est le noeud $alpha")
@@ -336,17 +334,14 @@ function read_info_graph_nonreserve(model,gridgraph)
     
     # Lecture données du graphe de la grille
     Arcs         = gridgraph.Arcs
-    Noeuds       = gridgraph.Noeuds
-    NoeudsFictif = gridgraph.NoeudsFictif
     ArcsFictif   = gridgraph.ArcsFictif
     
     # variable de sélection des noeuds de la reserve
     x_opt = round.(Int,value.(model[:x]).data)
-    push!(x_opt, 0)
-    println("La non-réserve est composée des noeuds $(NoeudsFictif[x_opt[NoeudsFictif] .== 0])")
+    println("La non-réserve est composée des noeuds $(x_opt .== 0)")
     
     # variable de sélection de la racine de l'arbre
-    println("Le noeud fictif $(alpha) est la racine de l'arbre couvrant de la non-réserve")
+    println("Le noeud fictif est la racine de l'arbre couvrant de la non-réserve")
     
     # variable de sélection d'arcs
     v_tmp = round.(Int,value.(model[:v]).data)
@@ -541,21 +536,19 @@ end
 function visualisation_reserve_nonreserve_graph(x_opt,u_opt,r_opt,v_opt,dir,gridgraph)
     
     # lecture des données du graphe de la grille
-    NoeudsFictif   = gridgraph.NoeudsFictif
     Arcs           = gridgraph.Arcs
     ArcsFictif     = gridgraph.ArcsFictif
-    N_noeudsfictif = length(NoeudsFictif)
+    N_noeuds       = length(gridgraph.Noeuds)
     
     # création de l'objet graph de julia
-    G = DiGraph(N_noeudsfictif)
-    nodelabels = collect(1:N_noeudsfictif)
-    
+    G = DiGraph(N_noeuds+1)
+    nodelabels = collect(1:N_noeuds+1)
     for a in union(Arcs,ArcsFictif)
         add_edge!(G,a[1],a[2])
     end
     
     nodefillc = []
-    for i in NoeudsFictif
+    for i in 1:N_noeuds
         if x_opt[i]==1
             if r_opt[i]==1
                 push!(nodefillc, RGBA(0.0,1.0,0.0,1.0))
@@ -566,6 +559,7 @@ function visualisation_reserve_nonreserve_graph(x_opt,u_opt,r_opt,v_opt,dir,grid
             push!(nodefillc, RGBA(0.0,0.0,1.0,0.5))
         end
     end
+    push!(nodefillc, RGBA(0.0,0.0,1.0,0.5))
     
     edgestrokec = []
     for a in edges(G)
@@ -602,89 +596,68 @@ end
     Return the sub-gridgraph consisting of the ball centered on node center with radius R, and the list of nodes of the subgraph
 """
 function get_subgraph_from_center(gridgraph::GridGraph, center::Int, R::Int, dmin::Array{Int,2})
-    # ballNodes =findall(dmin[center,:] .<= R)
-    # N_ballNodes = length(ballNodes)
+    ballNodes =findall(dmin[center,:] .<= R)
+    N_ballNodes = length(ballNodes)
 
-    # # Noeud fictif
-    # ball_NoeudsFictif = 1:(N_ballNodes+1)
-    # ball_alpha = N_ballNodes + 1
-
-    
-    # # for each node of the ball, compute its neighbors in the ball
-    # ballVoisins = Vector{Vector{Int}}()
-    # for i in ballNodes
-    #     push!(ballVoisins, Vector{Int}())
-    #     for j in  gridgraph.Voisins[i]
-    #         if dmin[center, j] <= R
-    #             push!(ballVoisins[i], findfirst(ballNodes .== j))
-    #         end
-    #     end
-    # end
+    # Noeud fictif
+    ballalpha = N_ballNodes + 1
 
 
-    # ballPeripheriques = Vector{Int}()
-    # for i in gridgraph.NoeudsPeripheriques
+    # for each node of the ball, compute its neighbors in the ball
+    ballVoisins = Vector{Vector{Int}}()
+    ballArcs = Vector{Pair{Int,Int}}()
+    ballPeripheriques = Vector{Int}()
+    ballArcsFictif = Vector{Pair{Int,Int}}()
+    idx_i = 0
+    for i in ballNodes
+        idx_i += 1
+        push!(ballVoisins, Vector{Int}())
+        for j in  gridgraph.Voisins[i]
+            if dmin[center, j] <= R
+                idx_j = findfirst(ballNodes .== j)
+                push!(ballVoisins[idx], idx_j)
+                push!(ballArcs,idx_i=>idx_j)
+            end
+        end
+        # Get the border of the graph
+        if dmin[center, i] == R || i ∈ gridgraph.NoeudsPeripheriques
+            push!(ballPeripheriques, idx_i)
+            push!(ballArcsFictif,(ballalpha=>idx_i))
+            push!(ballArcsFictif,(idx_i=>ballalpha))
+        end 
+    end
 
-        
-    #     # Liste des voisins pour chaque noeud de la grille de taille Nx*Ny
-    #     Voisins = Vector{Vector{Int}}()
-    #     for k in Noeuds
-    #         push!(Voisins, Vector{Int}())
-    #         # arêtes horizontales
-    #         if mod(k,Nx) != 0
-    #             push!(Voisins[k], k+1)
-    #             push!(Voisins[k+1], k)
-    #         end
-    #         # arêtes verticales
-    #         if k <= (Ny-1)*Nx
-    #             push!(Voisins[k], k+Nx)
-    #             push!(Voisins[k+Nx], k)
-    #         end
-    #     end
-                
-    #     # Arcs du graphe associé à la grille de taille Nx*Ny
-    #     Arcs = Vector{Pair{Int,Int}}()
-    #     for i in Noeuds
-    #         for j in Voisins[i]
-    #             push!(Arcs,i=>j)
-    #         end
-    #     end
-        
-    #     # Noeuds périphériques du graphe
-    #     NoeudsPeripheriques = Vector{Int64}()
-    #     for k in Noeuds
-    #         if length(Voisins[k]) < 4
-    #             push!(NoeudsPeripheriques,k)
-    #         end
-    #     end
-        
-    #     # Arêtes du graphe associé à la grille de taille Nx*Ny
-    #     ArcsFictif = Vector{Pair{Int,Int}}()
-    #     for k in NoeudsPeripheriques
-    #         # arêtes noeuds fictif avec les noeuds périphériques
-    #         push!(ArcsFictif,(alpha=>k))
-    #         push!(ArcsFictif,(k=>alpha))
-    #     end
-        
-    #     # Liste des voisins pour chaque noeud y compris le noeud fictif
-    #     VoisinsFictif = Vector{Vector{Int}}()
-    #     for i in Noeuds
-    #         push!(VoisinsFictif, Vector{Int}())
-    #         for j in  Voisins[i]
-    #             push!(VoisinsFictif[i], j)
-    #         end
-    #     end
-    #     push!(VoisinsFictif, Vector{Int}())
-    #     for i in NoeudsPeripheriques
-    #         push!(VoisinsFictif[i], alpha)
-    #         push!(VoisinsFictif[alpha], i)
-    #     end
+    # Liste des voisins pour chaque noeud y compris le noeud fictif
+    ballVoisinsFictif = Vector{Vector{Int}}()
+    for i in 1:N_ballNodes
+        push!(ballVoisinsFictif, Vector{Int}())
+        for j in  ballVoisins[i]
+            push!(ballVoisinsFictif[i], j)
+        end
+    end
+    push!(ballVoisinsFictif, Vector{Int}())
+    for i in ballPeripheriques
+        push!(ballVoisinsFictif[i], ballalpha)
+        push!(ballVoisinsFictif[ballalpha], i)
+    end
 
-        
-    #     # Noeuds noirs et blanc du damier
-    #     damier = Damier(Nx, Ny)
-    #     NoeudsNoirs  = damier.Black
-    #     NoeudsBlancs = damier.White
+    # get the color of each node of the ball
+    ballBlack = Vector{Int}()
+    ballWhite = Vector{Int}()
+    ballIsBlack = falses(N_ballNodes)
+    isBlack = gridgraph.damier.isBlack
+    for i in 1:N_ballNodes
+        if isBlack[ballNodes[i]]
+            push!(ballBlack[i])
+            ballIsBlack[i] = true
+        else
+            push!(ballWhite, i)
+        end
+    end
+    balldamier = Damier(ballIsBlack, ballBlack, ballWhite)
 
+    ballGrid = GridGraph(2*R+1, 2*R+1, 1:N_ballNodes, ballVoisins, ballArcs, ballPeripheriques, ballVoisinsFictif, ballArcsFictif, ballalpha, balldamier)
+
+    return ballNodes, ballGrid
 end
 

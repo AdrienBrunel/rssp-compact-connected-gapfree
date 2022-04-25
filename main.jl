@@ -73,7 +73,8 @@ if verbose
     # Affichage des infos de l'instance
     print_instance(instance,gridgraph)
     # Affichage les infos du damier
-    print_damier(GridGraph.NoeudsNoirs, GridGraph.NoeudsBlancs)
+    damier = Damier(gridgraph.Nx, gridgraph.Ny)
+    print_damier(damier.Black, damier.White)
 end
 
 

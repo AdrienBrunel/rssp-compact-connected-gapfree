@@ -19,7 +19,7 @@
         Rmax = params.Rmax
 
         if is_damier
-            NoeudsNoirs  = gridgraph.NoeudsNoirs
+            NoeudsNoirs  = gridgraph.damier.Black
         end
 
         if is_non_reserve

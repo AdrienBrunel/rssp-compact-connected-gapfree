@@ -17,6 +17,47 @@ struct Parameters
     end
 end
 
+
+# ==============================================================================
+#  DAMIER
+# ==============================================================================
+struct Damier
+    IsBlack::BitVector
+    Black::Vector{Int64}
+    White::Vector{Int64}
+    
+    # Fonction générant la liste des noeuds noirs et blancs du damier de la grille
+    function Damier(Nx::Int, Ny::Int)
+        # Initialisation
+        IsBlack = falses(Nx*Ny)
+        Black   = Vector{Int64}()
+        White   = Vector{Int64}()
+        
+        # Damier
+        num_ligne = 0
+        for i in 1:(Nx*Ny)
+            if mod(i,Nx) == 0
+                num_colonne = Nx
+            else
+                num_colonne = mod(i,Nx)
+            end
+            
+            if mod(i,Nx) == 1
+                num_ligne = num_ligne + 1
+            end
+            
+            if mod(num_ligne,2) == mod(num_colonne,2)
+                IsBlack[i] = true
+                push!(Black,i)
+            else
+                push!(White,i)
+            end
+        end
+        
+        new(IsBlack, Black, White)
+    end
+end
+
 # ==============================================================================
 # 2 - GRID GRAPH
 # ==============================================================================
@@ -32,12 +73,10 @@ end
     * `Voisins::Vector{Vector{Int}}`:
     * `Arcs::Vector{Pair{Int,Int}}`:
     * `NoeudsPeripheriques::Vector{Int}`:
-    * `NoeudsFictif::Vector{Int}`:
     * `VoisinsFictif::Vector{Vector{Int}}`:
     * `ArcsFictif::Vector{Pair{Int,Int}}`:
     * `alpha::Int64`:
-    * `NoeudsNoirs::Vector{Int}`:
-    * `NoeudsBlancs::Vector{Int}`: 
+    * `damier::Damier`:
 """
 struct GridGraph
     Nx::Int
@@ -46,18 +85,15 @@ struct GridGraph
     Voisins::Vector{Vector{Int}}
     Arcs::Vector{Pair{Int,Int}}
     NoeudsPeripheriques::Vector{Int}
-    NoeudsFictif::Vector{Int}
     VoisinsFictif::Vector{Vector{Int}}
     ArcsFictif::Vector{Pair{Int,Int}}
     alpha::Int64
-    NoeudsNoirs::Vector{Int}
-    NoeudsBlancs::Vector{Int}
+    damier::Damier
     
     # Fonction donnant les éléments du graphe de la grille
     function GridGraph(Nx::Int, Ny::Int)
         # Noeuds du graphe associé à la grille de taille Nx*Ny
         Noeuds = 1:Nx*Ny;
-        NoeudsFictif = 1:(Nx*Ny+1);
         
         # Noeud fictif
         alpha = Nx*Ny+1;
@@ -121,14 +157,10 @@ struct GridGraph
         
         # Noeuds noirs et blanc du damier
         damier = Damier(Nx, Ny)
-        NoeudsNoirs  = damier.Black
-        NoeudsBlancs = damier.White
         
-        new(Nx, Ny, Noeuds,Voisins,Arcs,NoeudsPeripheriques,NoeudsFictif,VoisinsFictif,ArcsFictif,alpha,NoeudsNoirs,NoeudsBlancs)
+        new(Nx, Ny, Noeuds,Voisins,Arcs,NoeudsPeripheriques,VoisinsFictif,ArcsFictif,alpha, damier)
     end
 end
-
-
 
 
 # ==============================================================================
@@ -299,43 +331,3 @@ struct InstanceFromFiles
     end
 end
 
-# ==============================================================================
-# 4 - DAMIER
-# ==============================================================================
-struct Damier
-    IsBlack::Array{Int64,1}
-    Black::Vector{Int64}
-    White::Vector{Int64}
-    
-    # Fonction générant la liste des noeuds noirs et blancs du damier de la grille
-    function Damier(Nx::Int, Ny::Int)
-        # Initialisation
-        IsBlack = Array{Int64,1}(undef,Nx*Ny)
-        Black   = Vector{Int64}()
-        White   = Vector{Int64}()
-        
-        # Damier
-        num_ligne = 0
-        for i in 1:(Nx*Ny)
-            if mod(i,Nx) == 0
-                num_colonne = Nx
-            else
-                num_colonne = mod(i,Nx)
-            end
-            
-            if mod(i,Nx) == 1
-                num_ligne = num_ligne + 1
-            end
-            
-            IsBlack[i] = 0
-            if mod(num_ligne,2) == mod(num_colonne,2)
-                IsBlack[i] = 1
-                push!(Black,i)
-            else
-                push!(White,i)
-            end
-        end
-        
-        new(IsBlack, Black, White)
-    end
-end
