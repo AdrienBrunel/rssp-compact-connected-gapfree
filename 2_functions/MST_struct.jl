@@ -10,12 +10,8 @@ struct Parameters
     is_damier::Bool
     is_rmax::Bool
     Rmax::Int64
-    
-    
-    function Parameters(beta,spec_nb,rand_seed,is_non_reserve,is_callbacks,is_damier,is_rmax,Rmax=-1)
-        new(beta,spec_nb,rand_seed,is_non_reserve,is_callbacks,is_damier,is_rmax,Rmax)
-    end
 end
+
 
 
 # ==============================================================================
@@ -25,37 +21,37 @@ struct Damier
     IsBlack::BitVector
     Black::Vector{Int64}
     White::Vector{Int64}
+end
+
+# Fonction générant la liste des noeuds noirs et blancs du damier de la grille
+function Damier(Nx::Int, Ny::Int)
+    # Initialisation
+    IsBlack = falses(Nx*Ny)
+    Black   = Vector{Int64}()
+    White   = Vector{Int64}()
     
-    # Fonction générant la liste des noeuds noirs et blancs du damier de la grille
-    function Damier(Nx::Int, Ny::Int)
-        # Initialisation
-        IsBlack = falses(Nx*Ny)
-        Black   = Vector{Int64}()
-        White   = Vector{Int64}()
-        
-        # Damier
-        num_ligne = 0
-        for i in 1:(Nx*Ny)
-            if mod(i,Nx) == 0
-                num_colonne = Nx
-            else
-                num_colonne = mod(i,Nx)
-            end
-            
-            if mod(i,Nx) == 1
-                num_ligne = num_ligne + 1
-            end
-            
-            if mod(num_ligne,2) == mod(num_colonne,2)
-                IsBlack[i] = true
-                push!(Black,i)
-            else
-                push!(White,i)
-            end
+    # Damier
+    num_ligne = 0
+    for i in 1:(Nx*Ny)
+        if mod(i,Nx) == 0
+            num_colonne = Nx
+        else
+            num_colonne = mod(i,Nx)
         end
         
-        new(IsBlack, Black, White)
+        if mod(i,Nx) == 1
+            num_ligne = num_ligne + 1
+        end
+        
+        if mod(num_ligne,2) == mod(num_colonne,2)
+            IsBlack[i] = true
+            push!(Black,i)
+        else
+            push!(White,i)
+        end
     end
+    
+    return Damier(IsBlack, Black, White)
 end
 
 # ==============================================================================
@@ -89,77 +85,77 @@ struct GridGraph
     ArcsFictif::Vector{Pair{Int,Int}}
     alpha::Int64
     damier::Damier
-    
-    # Fonction donnant les éléments du graphe de la grille
-    function GridGraph(Nx::Int, Ny::Int)
-        # Noeuds du graphe associé à la grille de taille Nx*Ny
-        Noeuds = 1:Nx*Ny;
-        
-        # Noeud fictif
-        alpha = Nx*Ny+1;
-        
-        # Liste des voisins pour chaque noeud de la grille de taille Nx*Ny
-        Voisins = Vector{Vector{Int}}()
-        for _ in Noeuds
-            push!(Voisins, Vector{Int}())
-        end
-        for i in Noeuds
-            # arêtes horizontales
-            if mod(i,Nx) != 0
-                push!(Voisins[i], i+1)
-                push!(Voisins[i+1], i)
-            end
-            # arêtes verticales
-            if i <= (Ny-1)*Nx
-                push!(Voisins[i], i+Nx)
-                push!(Voisins[i+Nx], i)
-            end
-        end
-                
-        # Arcs du graphe associé à la grille de taille Nx*Ny
-        Arcs = Vector{Pair{Int,Int}}()
-        for i in Noeuds
-            for j in Voisins[i]
-                push!(Arcs,i=>j)
-            end
-        end
-        
-        # Noeuds périphériques du graphe
-        NoeudsPeripheriques = Vector{Int64}()
-        for i in Noeuds
-            if length(Voisins[i]) < 4
-                push!(NoeudsPeripheriques,i)
-            end
-        end
-        
-        # Arêtes du graphe associé à la grille de taille Nx*Ny
-        ArcsFictif = Vector{Pair{Int,Int}}()
-        for i in NoeudsPeripheriques
-            # arêtes noeuds fictif avec les noeuds périphériques
-            push!(ArcsFictif,(alpha=>i))
-            push!(ArcsFictif,(i=>alpha))
-        end
-        
-        # Liste des voisins pour chaque noeud y compris le noeud fictif
-        VoisinsFictif = Vector{Vector{Int}}()
-        for i in Noeuds
-            push!(VoisinsFictif, Vector{Int}())
-            for j in  Voisins[i]
-                push!(VoisinsFictif[i], j)
-            end
-        end
-        push!(VoisinsFictif, Vector{Int}())
-        for i in NoeudsPeripheriques
-            push!(VoisinsFictif[i], alpha)
-            push!(VoisinsFictif[alpha], i)
-        end
+end
 
-        
-        # Noeuds noirs et blanc du damier
-        damier = Damier(Nx, Ny)
-        
-        new(Nx, Ny, Noeuds,Voisins,Arcs,NoeudsPeripheriques,VoisinsFictif,ArcsFictif,alpha, damier)
+# Fonction donnant les éléments du graphe de la grille
+function GridGraph(Nx::Int, Ny::Int)
+    # Noeuds du graphe associé à la grille de taille Nx*Ny
+    Noeuds = 1:Nx*Ny;
+    
+    # Noeud fictif
+    alpha = Nx*Ny+1;
+    
+    # Liste des voisins pour chaque noeud de la grille de taille Nx*Ny
+    Voisins = Vector{Vector{Int}}()
+    for _ in Noeuds
+        push!(Voisins, Vector{Int}())
     end
+    for i in Noeuds
+        # arêtes horizontales
+        if mod(i,Nx) != 0
+            push!(Voisins[i], i+1)
+            push!(Voisins[i+1], i)
+        end
+        # arêtes verticales
+        if i <= (Ny-1)*Nx
+            push!(Voisins[i], i+Nx)
+            push!(Voisins[i+Nx], i)
+        end
+    end
+            
+    # Arcs du graphe associé à la grille de taille Nx*Ny
+    Arcs = Vector{Pair{Int,Int}}()
+    for i in Noeuds
+        for j in Voisins[i]
+            push!(Arcs,i=>j)
+        end
+    end
+    
+    # Noeuds périphériques du graphe
+    NoeudsPeripheriques = Vector{Int64}()
+    for i in Noeuds
+        if length(Voisins[i]) < 4
+            push!(NoeudsPeripheriques,i)
+        end
+    end
+    
+    # Arêtes du graphe associé à la grille de taille Nx*Ny
+    ArcsFictif = Vector{Pair{Int,Int}}()
+    for i in NoeudsPeripheriques
+        # arêtes noeuds fictif avec les noeuds périphériques
+        push!(ArcsFictif,(alpha=>i))
+        push!(ArcsFictif,(i=>alpha))
+    end
+    
+    # Liste des voisins pour chaque noeud y compris le noeud fictif
+    VoisinsFictif = Vector{Vector{Int}}()
+    for i in Noeuds
+        push!(VoisinsFictif, Vector{Int}())
+        for j in  Voisins[i]
+            push!(VoisinsFictif[i], j)
+        end
+    end
+    push!(VoisinsFictif, Vector{Int}())
+    for i in NoeudsPeripheriques
+        push!(VoisinsFictif[i], alpha)
+        push!(VoisinsFictif[alpha], i)
+    end
+
+    
+    # Noeuds noirs et blanc du damier
+    damier = Damier(Nx, Ny)
+    
+    return GridGraph(Nx, Ny, Noeuds,Voisins,Arcs,NoeudsPeripheriques,VoisinsFictif,ArcsFictif,alpha, damier)
 end
 
 

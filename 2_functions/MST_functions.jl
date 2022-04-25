@@ -615,7 +615,7 @@ function get_subgraph_from_center(gridgraph::GridGraph, center::Int, R::Int, dmi
         for j in  gridgraph.Voisins[i]
             if dmin[center, j] <= R
                 idx_j = findfirst(ballNodes .== j)
-                push!(ballVoisins[idx], idx_j)
+                push!(ballVoisins[idx_i], idx_j)
                 push!(ballArcs,idx_i=>idx_j)
             end
         end
@@ -645,10 +645,10 @@ function get_subgraph_from_center(gridgraph::GridGraph, center::Int, R::Int, dmi
     ballBlack = Vector{Int}()
     ballWhite = Vector{Int}()
     ballIsBlack = falses(N_ballNodes)
-    isBlack = gridgraph.damier.isBlack
+    isBlack = gridgraph.damier.IsBlack
     for i in 1:N_ballNodes
         if isBlack[ballNodes[i]]
-            push!(ballBlack[i])
+            push!(ballBlack, i)
             ballIsBlack[i] = true
         else
             push!(ballWhite, i)

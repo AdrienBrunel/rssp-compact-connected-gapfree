@@ -112,8 +112,10 @@ if !is_decompose
     end
 else
     dmin = shortest_distances(length(gridgraph.Noeuds),gridgraph.Voisins)
-    for i in gridgraph.Noeuds
+    for i in 1:1 #gridgraph.Noeuds
         # create one gridgraph and one instance for each node and set it as the center of the reserve
+        ballNodes, ballGraph = get_subgraph_from_center(gridgraph, i, Rmax, dmin)
+        print(ballNodes)
     end
     
     
