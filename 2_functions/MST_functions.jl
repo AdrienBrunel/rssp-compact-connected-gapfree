@@ -285,7 +285,7 @@ end
 
 
 # Lecture des infos
-function read_info_graph_reserve(model,gridgraph,is_beta)
+function read_info_graph_reserve(model::JuMP.Model, gridgraph::GridGraph, is_beta::Bool)
     
     # Lecture données du graphe de la grille
     Arcs   = gridgraph.Arcs
@@ -593,7 +593,7 @@ end
     Return the sub-gridgraph consisting of the ball centered on node center with radius R, and the list of nodes of the subgraph
 """
 function get_subgraph_from_center(gridgraph::GridGraph, center::Int, R::Int, dmin::Array{Int,2})
-    ballNodes =findall(dmin[center,:] .<= R)
+    ballNodes = findall(dmin[center,:] .<= R)
     N_ballNodes = length(ballNodes)
 
     # Noeud fictif

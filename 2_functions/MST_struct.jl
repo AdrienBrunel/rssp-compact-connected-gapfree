@@ -1,13 +1,14 @@
 # ==============================================================================
 # 1 - PARAMETERS
 # ==============================================================================
-struct Parameters
+mutable struct Parameters
     beta::Float64
     spec_nb::Int64
     rand_seed::Int64
     is_non_reserve::Bool
     is_callbacks::Bool
     is_damier::Bool
+    is_beta::Bool
     is_rmax::Bool
     is_decompose::Bool
     Rmax::Int64
@@ -176,7 +177,7 @@ struct Instance
     BoundaryLength::Dict{Pair{Int,Int},Int}
     BoundaryCorrection::Vector{Float64}
     Beta::Float64
-    IsLockedOut::Array{Int8,2}
+    IsLockedOut::Vector{Int8}
 end
 
 # Fonction d'habillage de l'instance
@@ -209,7 +210,7 @@ function Instance(params,gridgraph)
     
     # Coût de chaque noeud j
     Cost = zeros(N_noeuds)
-    IsLockedOut = zeros(N_pu,1)
+    IsLockedOut = zeros(N_pu)
     for j in Noeuds
         Cost[j] = rand(1:5)
     end

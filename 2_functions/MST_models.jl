@@ -1,7 +1,7 @@
 # ==============================================================================
 # 0 - DEV
 # ==============================================================================
-    function ReserveSiteSelection_SpatialConstraints(instance::Instance, gridgraph::GridGraph, params::Parameters, center::Int =0, ub::Int = BigInt)
+    function ReserveSiteSelection_SpatialConstraints(instance::Instance, gridgraph::GridGraph, params::Parameters, center::Int =0, ub::Float64 = Inf)
 
         ## LECTURE DES DONNEES -------------------------------------------------
         Noeuds               = gridgraph.Noeuds
@@ -15,7 +15,6 @@
         Targets              = instance.Targets
         BoundaryLength       = instance.BoundaryLength
         BoundaryCorrection   = instance.BoundaryCorrection
-        Beta                 = instance.Beta
         Rmax = params.Rmax
 
         if params.is_damier
@@ -36,8 +35,7 @@
         # v : variable de sélection de l'arc dans le graphe de la non-réserve
         # f : variable de sélection du flux dans le graphe de la réserve
         # g : variable de sélection du flux dans le graphe de la non-réserve
-
-        m = Model(Gurobi.Optimizer)
+        m = Model(() -> Gurobi.Optimizer(GRB_ENV))
 		set_optimizer_attribute(m, "TimeLimit", 1000)
 		set_optimizer_attribute(m, "LogFile", "$(res_dir)/gurobi_log.txt")
 
@@ -93,13 +91,13 @@
 
 		## OBJECTIF ------------------------------------------------------------
 		if params.is_beta
-	    	@objective(m, Min, sum(Cost[j]*x[j] for j in Noeuds) + beta*sum(BoundaryLength[d]*(x[d[1]]-z[d]) for d in Arcs) + Beta*sum(BoundaryCorrection[j]*x[j] for j in NoeudsPeripheriques))
-            if is_decompose
-                @constraint(m, upper_bound, sum(Cost[j]*x[j] for j in Noeuds) + beta*sum(BoundaryLength[d]*(x[d[1]]-z[d]) for d in Arcs) + Beta*sum(BoundaryCorrection[j]*x[j] for j in NoeudsPeripheriques) <= ub)
+	    	@objective(m, Min, sum(Cost[j]*x[j] for j in Noeuds) + params.beta * (sum(BoundaryLength[d]*(x[d[1]]-z[d]) for d in Arcs) + sum(BoundaryCorrection[j] * x[j] for j in NoeudsPeripheriques)))
+            if is_decompose && ub < Inf
+                @constraint(m, upper_bound, sum(Cost[j]*x[j] for j in Noeuds) + params.beta * (sum(BoundaryLength[d]*(x[d[1]]-z[d]) for d in Arcs) + sum(BoundaryCorrection[j] * x[j] for j in NoeudsPeripheriques)) <= ub)
             end
 		else
 			@objective(m, Min, sum(Cost[j]*x[j] for j in Noeuds))
-            if is_decompose
+            if is_decompose && ub < Inf
                 @constraint(m, upper_bound, sum(Cost[j]*x[j] for j in Noeuds) <= ub)
             end
 		end
@@ -162,7 +160,6 @@
         function my_callback_function(cb_data)
             # stop the callback if the solution is non-integer
             x_val = zeros(Int,N_noeuds)
-            # x_val = Dict{Int,Int}()
             for j in Noeuds
                 val = callback_value(cb_data, x[j])
                 if abs(val-round(Int,val)) < 1e-6
@@ -175,18 +172,18 @@
                     return
                 end
             end
-            for d in Arcs
-                val = callback_value(cb_data, u[d])
-                if abs(val-round(Int,val)) >= 1e-6
-                    return
-                end
-                if params.is_non_reserve
-                    val = callback_value(cb_data, v[d])
-                    if abs(val-round(Int,val)) >= 1e-6
-                        return
-                    end
-                end
-            end
+            # for d in Arcs
+            #     val = callback_value(cb_data, u[d])
+            #     if abs(val-round(Int,val)) >= 1e-6
+            #         return
+            #     end
+            #     if params.is_non_reserve
+            #         val = callback_value(cb_data, v[d])
+            #         if abs(val-round(Int,val)) >= 1e-6
+            #             return
+            #         end
+            #     end
+            # end
             if params.is_non_reserve
                 push!(x_val, 0)
             end
@@ -217,7 +214,8 @@
             end
 
             # if the reserve is connected but needs to have a maximum radius compute pairwise distances in the reserve
-            if params.is_rmax && (length(Reserve_Components) == 1)
+            radius = 0
+            if params.is_rmax && (isempty(Commodities_to_add))
                 Reserve = Noeuds[findall(x_val .== 1)]
                 
                 # for each node of the reserve, compute its neighbors in the reserve
@@ -243,15 +241,15 @@
                 if radius > Rmax
                     println("cb: center is $(Reserve[center]) and radius is $radius")
                     for k in Reserve[findall(dmin_in_reserve[center,:] .== radius)]
-                        if k ∈ Commodites_choisies
-                            continue
-                        else
+                        # if k ∈ Commodites_choisies
+                        #     continue
+                        # else
                             push!(Commodites_choisies, k)
                             setdiff!(Commodites_restante, k)
                             println("cb: node $k too far away, add commodity")
                             push!(Commodities_to_add, k)
-                            break
-                        end
+                            # break
+                        # end
                     end
                 end 
             end
@@ -357,6 +355,10 @@
                         end
                     end
                 end
+            end
+
+            if isempty(Commodities_to_add)
+                println("Solution = $x_val, radius = $radius")
             end
         end
         # Contrainte sur les variables de flux
