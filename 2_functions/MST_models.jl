@@ -1,7 +1,7 @@
 # ==============================================================================
 # 0 - DEV
 # ==============================================================================
-    function ReserveSiteSelection_SpatialConstraints(instance, gridgraph, params, center=0)
+    function ReserveSiteSelection_SpatialConstraints(instance::Instance, gridgraph::GridGraph, params::Parameters, center::Int =0, ub::Int = BigInt)
 
         ## LECTURE DES DONNEES -------------------------------------------------
         Noeuds               = gridgraph.Noeuds
@@ -94,8 +94,14 @@
 		## OBJECTIF ------------------------------------------------------------
 		if params.is_beta
 	    	@objective(m, Min, sum(Cost[j]*x[j] for j in Noeuds) + beta*sum(BoundaryLength[d]*(x[d[1]]-z[d]) for d in Arcs) + Beta*sum(BoundaryCorrection[j]*x[j] for j in NoeudsPeripheriques))
+            if is_decompose
+                @constraint(m, upper_bound, sum(Cost[j]*x[j] for j in Noeuds) + beta*sum(BoundaryLength[d]*(x[d[1]]-z[d]) for d in Arcs) + Beta*sum(BoundaryCorrection[j]*x[j] for j in NoeudsPeripheriques) <= ub)
+            end
 		else
 			@objective(m, Min, sum(Cost[j]*x[j] for j in Noeuds))
+            if is_decompose
+                @constraint(m, upper_bound, sum(Cost[j]*x[j] for j in Noeuds) <= ub)
+            end
 		end
 
         ## CONTRAINTES ---------------------------------------------------------
@@ -134,6 +140,11 @@
         # avoid isolated nodes in the reserve and in the non-reserve (former Réduction damier but for all nodes)
         @constraint(m, no_isolated[j in Noeuds], x[j] <= sum(x[i] for i in Voisins[j]))
         @constraint(m, no_isolated_nr[j in NoeudsInterieurs], 1-x[j] <= sum(1-x[i] for i in Voisins[j]))
+
+        # in the decomposition algorithm, the center is fixed
+        if params.is_decompose
+            @constraint(m, fixed_center, r[center] == 1)
+        end
 
         if params.is_rmax
             @constraint(m, source_rmax[j in Noeuds, i in Noeuds;dmin[i,j]>Rmax], x[i] <=  1-r[j])

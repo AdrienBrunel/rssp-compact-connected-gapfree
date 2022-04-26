@@ -171,16 +171,8 @@ else
     
     # 3. Solve the problem in each ball
     for i in sortedFeasible
-        my_model = ReserveSiteSelection_SpatialConstraints(feasibleBallInstances[i], feasibleBallGraphs[i], params, is_beta, is_non_reserve, is_callbacks, is_damier, is_rmax)
-        t1 = time_ns()
+        my_model = ReserveSiteSelection_SpatialConstraints(feasibleBallInstances[i], feasibleBallGraphs[i], params, findfirst(feasibleBallNodes[i] .== feasibleCenters[i]))
         optimize!(my_model)
-        t2 = time_ns()
-        computation_time = round((t2-t1)/1e9,digits=2)
-        nb_variables     = length(my_model.moi_backend.optimizer.model.variable_info)
-        nb_lin_con       = length(my_model.moi_backend.optimizer.model.affine_constraint_info)
-        println("Nombre de variables : $(nb_variables)")
-        println("Nombre de contraintes : $(nb_lin_con)")
-        println("Temps de calcul : $(computation_time)s")
         x_opt,z_opt,u_opt,r_opt    = read_info_graph_reserve(my_model,gridgraph,is_beta)
     end 
 end
