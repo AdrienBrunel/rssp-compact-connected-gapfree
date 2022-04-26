@@ -9,6 +9,7 @@ struct Parameters
     is_callbacks::Bool
     is_damier::Bool
     is_rmax::Bool
+    is_decompose::Bool
     Rmax::Int64
 end
 

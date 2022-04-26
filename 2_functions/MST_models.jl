@@ -1,7 +1,7 @@
 # ==============================================================================
 # 0 - DEV
 # ==============================================================================
-    function ReserveSiteSelection_SpatialConstraints(instance, gridgraph, params, is_beta, is_non_reserve, is_callbacks, is_damier, is_rmax)
+    function ReserveSiteSelection_SpatialConstraints(instance, gridgraph, params, center=0)
 
         ## LECTURE DES DONNEES -------------------------------------------------
         Noeuds               = gridgraph.Noeuds
@@ -18,11 +18,11 @@
         Beta                 = instance.Beta
         Rmax = params.Rmax
 
-        if is_damier
+        if params.is_damier
             NoeudsNoirs  = gridgraph.damier.Black
         end
 
-        if is_non_reserve
+        if params.is_non_reserve
             VoisinsFictif  = gridgraph.VoisinsFictif
             ArcsFictif     = gridgraph.ArcsFictif
             alpha          = gridgraph.alpha
@@ -42,18 +42,18 @@
 		set_optimizer_attribute(m, "LogFile", "$(res_dir)/gurobi_log.txt")
 
         NoeudsInterieurs = setdiff(Noeuds,NoeudsPeripheriques)
-        if is_damier
+        if params.is_damier
             Commodites_nr = intersect(NoeudsNoirs, NoeudsInterieurs)
         else
             Commodites_nr = NoeudsInterieurs
         end
         Commodites = Noeuds
-		if is_beta
-        	@variable(m, z[Arcs], Bin);
+		if params.is_beta
+            @variable(m, z[Arcs], Bin);
 		end
         @variable(m, u[Arcs], Bin);
         @variable(m, r[Noeuds], Bin);
-        if is_non_reserve
+        if params.is_non_reserve
             @variable(m, v[union(Arcs,ArcsFictif)], Bin);
         end
         @variable(m, x[Noeuds], Bin);
@@ -72,7 +72,7 @@
         end
         @variable(m, f[k in Commodites, i in NoeudsProche[k], j in Voisins[i];dmin[k,i]<=Rmax-1] >= 0);
         # - take care of non-reserve flow variables
-        if is_non_reserve
+        if params.is_non_reserve
             NoeudsProche_nr  = Vector{Vector{Int}}()
             NoeudsFrontiere_nr = Vector{Vector{Int}}()
             for k in Noeuds
@@ -92,7 +92,7 @@
         end
 
 		## OBJECTIF ------------------------------------------------------------
-		if is_beta
+		if params.is_beta
 	    	@objective(m, Min, sum(Cost[j]*x[j] for j in Noeuds) + beta*sum(BoundaryLength[d]*(x[d[1]]-z[d]) for d in Arcs) + Beta*sum(BoundaryCorrection[j]*x[j] for j in NoeudsPeripheriques))
 		else
 			@objective(m, Min, sum(Cost[j]*x[j] for j in Noeuds))
@@ -104,7 +104,7 @@
         @constraint(m, cibles[i in ConservationFeatures], sum(Amount[i,j]*x[j] for j in Noeuds) >= Targets[i])
 
         # Linearization of the perimeter term in the objective
-		if is_beta
+		if params.is_beta
 	        @constraint(m, linzi[d in Arcs],  z[d] - x[d[1]] <= 0)
         	@constraint(m, linzk[d in Arcs],  z[d] - x[d[2]] <= 0)
 		end
@@ -120,7 +120,7 @@
         @constraint(m, visu_r[j in Noeuds], sum(u[j=>i] for i in Voisins[j]) ==  x[j]-r[j])
 
         # Arbre couvrant de la non-reserve
-        if is_non_reserve
+        if params.is_non_reserve
             # @constraint(m, arc_unique_nr[a in union(Aretes,AretesFictif)],  v[a[1]=>a[2]] + v[a[2]=>a[1]] <= 1) # useless/redundant
             @constraint(m, nb_arcs_nr, sum(v[d] for d in union(Arcs,ArcsFictif)) == sum(1-x[j] for j in Noeuds))
             @constraint(m, arc_reserve_1_nr[i in NoeudsInterieurs,j in Voisins[i]],  v[i=>j] <= 1-x[i])
@@ -135,11 +135,11 @@
         @constraint(m, no_isolated[j in Noeuds], x[j] <= sum(x[i] for i in Voisins[j]))
         @constraint(m, no_isolated_nr[j in NoeudsInterieurs], 1-x[j] <= sum(1-x[i] for i in Voisins[j]))
 
-        if is_rmax
+        if params.is_rmax
             @constraint(m, source_rmax[j in Noeuds, i in Noeuds;dmin[i,j]>Rmax], x[i] <=  1-r[j])
         end
 
-        if is_damier
+        if params.is_damier
             Commodites_restante = copy(NoeudsNoirs)
         else
             Commodites_restante = copy(Commodites)
@@ -169,14 +169,14 @@
                 if abs(val-round(Int,val)) >= 1e-6
                     return
                 end
-                if is_non_reserve
+                if params.is_non_reserve
                     val = callback_value(cb_data, v[d])
                     if abs(val-round(Int,val)) >= 1e-6
                         return
                     end
                 end
             end
-            if is_non_reserve
+            if params.is_non_reserve
                 push!(x_val, 0)
             end
 
@@ -206,7 +206,7 @@
             end
 
             # if the reserve is connected but needs to have a maximum radius compute pairwise distances in the reserve
-            if is_rmax && (length(Reserve_Components) == 1)
+            if params.is_rmax && (length(Reserve_Components) == 1)
                 Reserve = Noeuds[findall(x_val .== 1)]
                 
                 # for each node of the reserve, compute its neighbors in the reserve
@@ -279,7 +279,7 @@
                 source_k_out = @build_constraint(sum(f[k,k,j] for j in Voisins[k]) == x[k]-r[k])
                 MOI.submit(m, MOI.LazyConstraint(cb_data), source_k_out)
 
-                if is_rmax
+                if params.is_rmax
                     # no more than Rmax positive flows for the commodity
                     rmax_inreserve = @build_constraint(sum(f[k, i, j] for i in NoeudsProche[k] for j in Voisins[i] if dmin[k,i] <= Rmax-1) <= Rmax)
                     MOI.submit(m, MOI.LazyConstraint(cb_data), rmax_inreserve)
@@ -287,7 +287,7 @@
             end
 
             # if no lazy cut has been added for the reserve, look at the connectivity of nonreserve
-            if isempty(Commodities_to_add) && is_non_reserve
+            if isempty(Commodities_to_add) && params.is_non_reserve
                 # Lazy cuts pour la connectivité de la non-réserve
                 NonReserve_Components = connected_components(VoisinsFictif,1 .- x_val)
                 if length(NonReserve_Components) > 1
@@ -349,7 +349,7 @@
             end
         end
         # Contrainte sur les variables de flux
-        if is_callbacks
+        if params.is_callbacks
             MOI.set(m, MOI.LazyConstraintCallback(), my_callback_function)
         else
             # # WARNING: this is not compatible with Rmax
@@ -359,7 +359,7 @@
             @constraint(m, conservation_flux_2[k in Commodites, n in Noeuds;n!=k], sum(f[k,j=>n] for j in Voisins[n]) - sum(f[k,n=>j] for j in Voisins[n]) >= 0)
             @constraint(m, source_k[k in Commodites], sum(f[k, k=>j] for j in Voisins[k]) - sum(f[k,j=>k] for j in Voisins[k]) == x[k]-r[k])
 
-            if is_non_reserve
+            if params.is_non_reserve
                 @constraint(m, flux_arc_1_nr[k in Commodites, d in union(Arcs,ArcsFictif)], g[k,d] <= v[d])
                 @constraint(m, flux_arc_2_nr[k in Commodites, d in union(Arcs,ArcsFictif)], g[k,d] <= 1-x[k]) # redondante ?
                 @constraint(m, conservation_flux_1_nr[k in Commodites], sum(g[k,alpha=>j] for j in VoisinsFictif[alpha]) - sum(g[k,j=>alpha] for j in VoisinsFictif[alpha]) <= 1)

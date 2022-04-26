@@ -51,7 +51,7 @@ end
 
 #folder = "24x14_CF3_BLM0.5_fromfiles"
 folder = "$(Nx)x$(Ny)_CF$(spec_nb)_BLM$(beta)"
-params = Parameters(beta,spec_nb,rand_seed,is_non_reserve,is_callbacks,is_damier,is_rmax,Rmax)
+params = Parameters(beta, spec_nb, rand_seed, is_non_reserve, is_callbacks, is_damier, is_rmax, is_decompose, Rmax)
 
 # Chargement des fonctions
 println("MST_functions.jl ...");include("$(root_dir)/2_functions/MST_functions.jl");
@@ -111,7 +111,14 @@ if !is_decompose
         visualisation_reserve_graph(x_opt,u_opt,r_opt,"/$(res_dir)/$(title).png",gridgraph)
     end
 else
+    # 1. Build the gridgraph and the instance of every ball that includes a feasible solution
     dmin = shortest_distances(length(gridgraph.Noeuds),gridgraph.Voisins)
+    feasibleCenters = Vector{Int}()
+    feasibleBallNodes = Vector{Vector{Int}}()
+    feasibleBallGraphs = Vector{Vector{Int}}()
+    feasibleRentability = Vector{Float64}()
+    feasibleBallInstances = Vector{Instance}()
+    println("Targets = $Targets")
     for i in 1:1 #gridgraph.Noeuds
         # create one gridgraph and one instance for each node and set it as the center of the reserve
         ballNodes, ballGraph = get_subgraph_from_center(gridgraph, i, Rmax, dmin)
@@ -123,30 +130,58 @@ else
         for i in 1:N_cf
             ballAmount[i,:] = instance.Amount[i,ballNodes]
         end
-        println(ballAmount)
+        totalAmount = sum(ballAmount, dims=2)
         Targets = instance.Targets
 
         # test the capacity of the ball to satisfy all constraints
-        totalAmount = sum(ballAmount, dims=2)
+        isFeasible = true
         println("Total amout in ball = $(totalAmount[:,1])")
-        println("Targets = $Targets")
-        println("Is it ok ? ", totalAmount[:,1] .>= Targets)
-
-
-        # define the remaining data of the subgraph
-        ballCost = instance.Cost[ballNodes]
-        ballLockedOut = instance.IsLockedOut[ballNodes]
-        ballRentability = instance.Rentability[ballNodes]
-        ballBoundaryLength = Dict{Pair{Int,Int},Int}()
-        for d in ballGraph.Arcs
-            ballBoundaryLength[d] = instance.BoundaryLength[ballNodes[d[1]]=>ballNodes[d[2]]]
-        end
-        ballBoundaryCorrection = zeros(length(ballNodes))
-        for i in ballGraph.NoeudsPeripheriques
-            ballBoundaryCorrection[i] = 4 - length(ballGraph.Voisins[i])
+        for i in 1:N_cf
+            if totalAmount[i,1] < Targets[i]
+                isFeasible = false
+                break
+            end
         end
 
-        # ballInstance = Instance(length(ballNodes),instance.N_cf,instance.N_bd,ballGraph.Noeuds,instance.ConservationFeatures,ballCost,ballAmount,Targets,ballRentability,ballBoundaryLength,ballBoundaryCorrection,instance.Beta,ballLockedOut)
+        if isFeasible
+            push!(feasibleCenters, i)
+            push!(feasibleBallNodes, ballNodes)
+            push!(feasibleBallGraphs, ballGraph)
+            push!(feasibleRentability, sum(instance.Rentability[ballNodes]))
+
+             # define the remaining data of the subgraph
+            ballCost = instance.Cost[ballNodes]
+            ballLockedOut = instance.IsLockedOut[ballNodes]
+            ballRentability = instance.Rentability[ballNodes]
+            ballBoundaryLength = Dict{Pair{Int,Int},Int}()
+            for d in ballGraph.Arcs
+                ballBoundaryLength[d] = instance.BoundaryLength[ballNodes[d[1]]=>ballNodes[d[2]]]
+            end
+            ballBoundaryCorrection = zeros(length(ballNodes))
+            for i in ballGraph.NoeudsPeripheriques
+                ballBoundaryCorrection[i] = 4 - length(ballGraph.Voisins[i])
+            end
+            ballInstance = Instance(length(ballNodes),instance.N_cf,instance.N_bd,ballGraph.Noeuds,instance.ConservationFeatures,ballCost,ballAmount,Targets,ballRentability,ballBoundaryLength,ballBoundaryCorrection,instance.Beta,ballLockedOut)
+            push!(feasibleBallInstances, ballInstance)
+        end        
     end
+
+    # 2. Sort the balls by decreasing rentability to start with those that are probably the best 
+    sortedFeasible = sortperm(Rentability; rev=true)
+    
+    # 3. Solve the problem in each ball
+    for i in sortedFeasible
+        my_model = ReserveSiteSelection_SpatialConstraints(feasibleBallInstances[i], feasibleBallGraphs[i], params, is_beta, is_non_reserve, is_callbacks, is_damier, is_rmax)
+        t1 = time_ns()
+        optimize!(my_model)
+        t2 = time_ns()
+        computation_time = round((t2-t1)/1e9,digits=2)
+        nb_variables     = length(my_model.moi_backend.optimizer.model.variable_info)
+        nb_lin_con       = length(my_model.moi_backend.optimizer.model.affine_constraint_info)
+        println("Nombre de variables : $(nb_variables)")
+        println("Nombre de contraintes : $(nb_lin_con)")
+        println("Temps de calcul : $(computation_time)s")
+        x_opt,z_opt,u_opt,r_opt    = read_info_graph_reserve(my_model,gridgraph,is_beta)
+    end 
 end
 
