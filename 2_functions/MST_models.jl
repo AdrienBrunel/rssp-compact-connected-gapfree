@@ -120,7 +120,7 @@ function ReserveSiteSelection_SpatialConstraints(instance::Instance, gridgraph::
     @constraint(m, arc_reserve_1[d in Arcs],  u[d] <= x[d[1]])
     @constraint(m, arc_reserve_2[d in Arcs],  u[d] <= x[d[2]])
     @constraint(m, racine_reserve[j in Noeuds],  r[j] <= x[j])
-    @constraint(m, racine_unique, sum(r[j] for j in Noeuds) <= 1)
+    @constraint(m, racine_unique, sum(r[j] for j in Noeuds) == 1)
     # In a reverse directed tree, each node that is not the root has exactly one out-arc
     @constraint(m, visu_r[j in Noeuds], sum(u[j=>i] for i in Voisins[j]) ==  x[j]-r[j])
     
@@ -174,6 +174,9 @@ function ReserveSiteSelection_SpatialConstraints(instance::Instance, gridgraph::
                 return  # Solution is something other than optimal.
             end
         end
+        if JuMP.callback_node_status(cb_data, m) != MOI.CALLBACK_NODE_STATUS_INTEGER
+            return
+        end
         
         # Before querying `callback_value`, you must call:
         Gurobi.load_callback_variable_primal(cb_data, cb_where)
@@ -186,6 +189,8 @@ function ReserveSiteSelection_SpatialConstraints(instance::Instance, gridgraph::
         if params.is_verbose
             println("cb: solution = $(findall(x_val .== 1)), r = $(findall(r_val.==1))")
         end
+        println("r = $(findall(r_val.==1))")
+
         if params.is_non_reserve
             push!(x_val, 0)
         end

@@ -111,12 +111,8 @@ function solve_instance(instance, gridgraph, params, res_dir)
         x_opt,z_opt,u_opt,r_opt    = read_info_graph_reserve(my_model,gridgraph,is_beta)
         Perimetre,Cout,Score,Rayon,Rayon_InReserve = print_info_reserve(x_opt,instance,gridgraph)
         title = "Solution_$(computation_time)s_Score$(Score)_Perimetre$(Perimetre)_Cout$(Cout)_$(is_beta)_$(is_non_reserve)_$(is_callbacks)_$(is_damier)_$(is_rmax)";
-        if is_non_reserve
-            x_opt,v_opt = read_info_graph_nonreserve(my_model,gridgraph)
-            visualisation_reserve_nonreserve_graph(x_opt,u_opt,r_opt,v_opt,"/$(res_dir)/$(title).png",gridgraph)
-        else
-            visualisation_reserve_graph(x_opt,u_opt,r_opt,"/$(res_dir)/$(title).png",gridgraph)
-        end
+        visualisation_reserve_graph(x_opt,u_opt,r_opt,"/$(res_dir)/$(title).png",gridgraph)
+
     else
         t1 = time_ns()
         println("\n***************************************************************************")
@@ -134,8 +130,6 @@ function solve_instance(instance, gridgraph, params, res_dir)
         for i in gridgraph.Noeuds
             # create one gridgraph and one instance for each node and set it as the center of the reserve
             ballNodes, ballGraph = get_subgraph_from_center(gridgraph, i, params.Rmax, dmin)
-            # print(ballNodes)
-            # print(ballGraph)
             # Quantité de chaque élément i dans chaque noeud j
             N_cf = instance.N_cf
             ballAmount = zeros(N_cf, length(ballNodes))
