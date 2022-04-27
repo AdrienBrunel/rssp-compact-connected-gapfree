@@ -293,11 +293,11 @@ function read_info_graph_reserve(model::JuMP.Model, gridgraph::GridGraph, is_bet
     
     # variable de sélection des noeuds de la reserve
     x_opt = round.(Int,value.(model[:x]).data)
-    println("La réserve est composée des noeuds $(Noeuds[x_opt[Noeuds] .== 1])")
+    # println("La réserve est composée des noeuds $(Noeuds[x_opt[Noeuds] .== 1])")
     
     # variable de sélection de la racine de l'arbre
     r_opt = round.(Int,value.(model[:r]).data)
-    println("Le noeud $(Noeuds[r_opt .== 1][1]) est la racine de l'arbre couvrant de la réserve")
+    # println("Le noeud $(Noeuds[r_opt .== 1][1]) est la racine de l'arbre couvrant de la réserve")
     
     # variable de linéarisation
     if is_beta
@@ -322,7 +322,7 @@ function read_info_graph_reserve(model::JuMP.Model, gridgraph::GridGraph, is_bet
             u_opt[d] = 1
         end
     end
-    println("Les arcs constituant l'arbre couvrant de la réserve sont $(Arcs[u_tmp .== 1])")
+    # println("Les arcs constituant l'arbre couvrant de la réserve sont $(Arcs[u_tmp .== 1])")
     
     return x_opt,z_opt,u_opt,r_opt
 end

@@ -53,7 +53,7 @@ end
 
 #folder = "24x14_CF3_BLM0.5_fromfiles"
 folder = "$(Nx)x$(Ny)_CF$(spec_nb)_BLM$(beta)"
-params = Parameters(beta, spec_nb, rand_seed, is_non_reserve, is_callbacks, is_damier, is_beta, is_rmax, is_decompose, Rmax)
+params = Parameters(beta, spec_nb, rand_seed, verbose, is_non_reserve, is_callbacks, is_damier, is_beta, is_rmax, is_decompose, Rmax)
 
 # Chargement des fonctions
 println("MST_functions.jl ...");include("$(root_dir)/2_functions/MST_functions.jl");
@@ -118,8 +118,13 @@ function solve_instance(instance, gridgraph, params, res_dir)
             visualisation_reserve_graph(x_opt,u_opt,r_opt,"/$(res_dir)/$(title).png",gridgraph)
         end
     else
+        println("\n***************************************************************************")
+        println("Solve the problem by decomposition over all ball with radius $(params.Rmax)")
+        println("*****************************************************************************\n")
+
         # 1. Build the gridgraph and the instance of every ball that includes a feasible solution
         dmin = shortest_distances(length(gridgraph.Noeuds),gridgraph.Voisins)
+        println("decompose: shortest paths are all computed")
         feasibleCenters = Vector{Int}()
         feasibleBallNodes = Vector{Vector{Int}}()
         feasibleBallGraphs = Vector{GridGraph}()
@@ -140,7 +145,6 @@ function solve_instance(instance, gridgraph, params, res_dir)
 
             # test the capacity of the ball to satisfy all constraints
             isFeasible = true
-            println("Total amout in ball = $(totalAmount[:,1])")
             for i in 1:N_cf
                 if totalAmount[i,1] < instance.Targets[i]
                     isFeasible = false
@@ -170,6 +174,7 @@ function solve_instance(instance, gridgraph, params, res_dir)
                 push!(feasibleBallInstances, ballInstance)
             end        
         end
+        println("decompose: all balls are computed")
 
         # 2. Sort the balls by decreasing rentability to start with those that are probably the best 
         sortedFeasible = sortperm(feasibleRentability; rev=true)
@@ -180,11 +185,13 @@ function solve_instance(instance, gridgraph, params, res_dir)
         best_r = zeros(Int, length(gridgraph.Noeuds))
         best_u = Dict{Pair{Int,Int},Int}()
         for i in sortedFeasible
+            println("\n---------------------------------------------")
+            println("--------------------------------------------")
+            println("decompose: solve ball with center $(feasibleCenters[i])\n")
             mip_model = ReserveSiteSelection_SpatialConstraints(feasibleBallInstances[i], feasibleBallGraphs[i], params, findfirst(feasibleBallNodes[i] .== feasibleCenters[i]), best_objval)
 
             # set gurobi parameters
-            set_optimizer_attribute(mip_model, "OutputFlag",Int(verbose))
-            set_optimizer_attribute(mip_model, "TimeLimit", 10.0)
+            set_optimizer_attribute(mip_model, "OutputFlag", Int(verbose))
             set_optimizer_attribute(mip_model, "Threads", 1)
 
             #  call Gurobi
@@ -192,15 +199,11 @@ function solve_instance(instance, gridgraph, params, res_dir)
 
             # get the optimal value
             if !has_values(mip_model)
-                println("\n***************************************************")
-                println("Center $(feasibleCenters[i]): could not improve best solution")
-                println("***************************************************\n")
+                println("decompose: could not improve best solution")
                 continue
             end
             objval =JuMP.objective_value(mip_model)
-            println("\n***************************************************")
-            println("Center $(feasibleCenters[i]): one new solution with value $objval has been found")
-            println("***************************************************\n")
+            println("decompose: center one new solution with value $objval has been found")
 
             # update incumbent
             if objval < best_objval
@@ -221,13 +224,13 @@ function solve_instance(instance, gridgraph, params, res_dir)
                 for d in feasibleBallGraphs[i].Arcs
                     best_u[feasibleBallNodes[i][d[1]]=>feasibleBallNodes[i][d[2]]] = u_opt[d]
                 end
-                println("new best solution = $(findall(best_x .== 1))")
+                println("decompose: new best solution = $(findall(best_x .== 1))")
             end
         end
         # output the best solution among all balls
-        println("\n***************************************************")
+        println("\n***************************************************************************")
+        println("***************************************************************************")
         println("Best solution is for center $(findfirst(best_r .== 1)) with value $best_objval")
-        println("***************************************************\n")
         Perimetre,Cout,Score,Rayon,Rayon_InReserve = print_info_reserve(best_x,instance,gridgraph)
         title = "Solution_0s_Score$(Score)_Perimetre$(Perimetre)_Cout$(Cout)_$(is_beta)_$(is_non_reserve)_$(is_callbacks)_$(is_damier)_$(is_rmax)"
         visualisation_reserve_graph(best_x,best_u,best_r,"/$(res_dir)/$(title).png",gridgraph)

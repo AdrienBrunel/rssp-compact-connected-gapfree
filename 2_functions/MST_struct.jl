@@ -5,6 +5,7 @@ mutable struct Parameters
     beta::Float64
     spec_nb::Int64
     rand_seed::Int64
+    is_verbose::Bool
     is_non_reserve::Bool
     is_callbacks::Bool
     is_damier::Bool
