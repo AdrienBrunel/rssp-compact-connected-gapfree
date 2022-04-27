@@ -28,8 +28,8 @@ verbose = false
 println("MST_struct.jl ...");include("$(root_dir)/2_functions/MST_struct.jl");
 
 # Grille de taille Nx*Ny
-Nx        = 12
-Ny        = 7
+Nx        = 2*12
+Ny        = 2*7
 # Compacité
 beta      = 1
 # Nombre de conservation features
@@ -46,7 +46,7 @@ is_decompose   = true
 
 # Divers
 if is_rmax
-    Rmax = 3
+    Rmax = 6
 else
     Rmax = Nx + Ny
 end
@@ -118,6 +118,7 @@ function solve_instance(instance, gridgraph, params, res_dir)
             visualisation_reserve_graph(x_opt,u_opt,r_opt,"/$(res_dir)/$(title).png",gridgraph)
         end
     else
+        t1 = time_ns()
         println("\n***************************************************************************")
         println("Solve the problem by decomposition over all ball with radius $(params.Rmax)")
         println("*****************************************************************************\n")
@@ -132,7 +133,7 @@ function solve_instance(instance, gridgraph, params, res_dir)
         feasibleBallInstances = Vector{Instance}()
         for i in gridgraph.Noeuds
             # create one gridgraph and one instance for each node and set it as the center of the reserve
-            ballNodes, ballGraph = get_subgraph_from_center(gridgraph, i, Rmax, dmin)
+            ballNodes, ballGraph = get_subgraph_from_center(gridgraph, i, params.Rmax, dmin)
             # print(ballNodes)
             # print(ballGraph)
             # Quantité de chaque élément i dans chaque noeud j
@@ -175,6 +176,7 @@ function solve_instance(instance, gridgraph, params, res_dir)
             end        
         end
         println("decompose: all balls are computed")
+        println("decompose: there are $(length(feasibleCenters)) feasible balls")
 
         # 2. Sort the balls by decreasing rentability to start with those that are probably the best 
         sortedFeasible = sortperm(feasibleRentability; rev=true)
@@ -187,12 +189,11 @@ function solve_instance(instance, gridgraph, params, res_dir)
         for i in sortedFeasible
             println("\n---------------------------------------------")
             println("--------------------------------------------")
-            println("decompose: solve ball with center $(feasibleCenters[i])\n")
+            println("decompose: solve ball with center $(feasibleCenters[i])")
             mip_model = ReserveSiteSelection_SpatialConstraints(feasibleBallInstances[i], feasibleBallGraphs[i], params, findfirst(feasibleBallNodes[i] .== feasibleCenters[i]), best_objval)
 
             # set gurobi parameters
-            set_optimizer_attribute(mip_model, "OutputFlag", Int(verbose))
-            set_optimizer_attribute(mip_model, "Threads", 1)
+            set_optimizer_attribute(mip_model, "OutputFlag", Int(params.is_verbose))
 
             #  call Gurobi
             optimize!(mip_model)
@@ -227,10 +228,13 @@ function solve_instance(instance, gridgraph, params, res_dir)
                 println("decompose: new best solution = $(findall(best_x .== 1))")
             end
         end
+        t2 = time_ns()
         # output the best solution among all balls
         println("\n***************************************************************************")
         println("***************************************************************************")
         println("Best solution is for center $(findfirst(best_r .== 1)) with value $best_objval")
+        computation_time = round((t2-t1)/1e9,digits=2)
+        println("Total computational time = $computation_time")
         Perimetre,Cout,Score,Rayon,Rayon_InReserve = print_info_reserve(best_x,instance,gridgraph)
         title = "Solution_0s_Score$(Score)_Perimetre$(Perimetre)_Cout$(Cout)_$(is_beta)_$(is_non_reserve)_$(is_callbacks)_$(is_damier)_$(is_rmax)"
         visualisation_reserve_graph(best_x,best_u,best_r,"/$(res_dir)/$(title).png",gridgraph)

@@ -37,6 +37,7 @@ function ReserveSiteSelection_SpatialConstraints(instance::Instance, gridgraph::
     # g : variable de sélection du flux dans le graphe de la non-réserve
     m = Model(() -> Gurobi.Optimizer(GRB_ENV))
     set_optimizer_attribute(m, "TimeLimit", 1000)
+    # set_optimizer_attribute(mip_model, "Threads", 1)
     set_optimizer_attribute(m, "LogFile", "$(res_dir)/gurobi_log.txt")
     
     NoeudsInterieurs = setdiff(Noeuds,NoeudsPeripheriques)
@@ -252,13 +253,15 @@ function ReserveSiteSelection_SpatialConstraints(instance::Instance, gridgraph::
                 println("cb: center is $(Reserve[center]) and radius is $radius")
             end
             if radius > Rmax
-                for k in Reserve[findall(dmin_in_reserve[center,:] .== radius)]
+                for k in Reserve[findall(dmin_in_reserve[center,:] .> Rmax)]
                     if k ∈ Commodites_choisies
                         continue
                     else
                         push!(Commodites_choisies, k)
                         setdiff!(Commodites_restante, k)
-                        println("cb: node $k too far away")
+                        if params.is_verbose
+                            println("cb: node $k too far away")
+                        end
                         push!(Commodities_to_add, k)
                         break
                     end
