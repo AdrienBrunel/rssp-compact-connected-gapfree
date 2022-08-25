@@ -124,7 +124,7 @@ function ReserveSiteSelection_SpatialConstraints(instance::Instance, gridgraph::
     # In a reverse directed tree, each node that is not the root has exactly one out-arc
     @constraint(m, visu_r[j in Noeuds], sum(u[j=>i] for i in Voisins[j]) ==  x[j]-r[j])
     
-    # Arbre couvrant de la non-reserve
+    # Spanning tree of the complementary of the reserve
     if params.is_non_reserve
         # @constraint(m, arc_unique_nr[a in union(Aretes,AretesFictif)],  v[a[1]=>a[2]] + v[a[2]=>a[1]] <= 1) # useless/redundant
         @constraint(m, nb_arcs_nr, sum(v[d] for d in union(Arcs,ArcsFictif)) == sum(1-x[j] for j in Noeuds))
@@ -189,8 +189,6 @@ function ReserveSiteSelection_SpatialConstraints(instance::Instance, gridgraph::
         if params.is_verbose
             println("cb: solution = $(findall(x_val .== 1)), r = $(findall(r_val.==1))")
         end
-        println("r = $(findall(r_val.==1))")
-
         if params.is_non_reserve
             push!(x_val, 0)
         end
@@ -248,9 +246,6 @@ function ReserveSiteSelection_SpatialConstraints(instance::Instance, gridgraph::
             
             # get minimum pairwise distances
             dmin_in_reserve = shortest_distances(length(Reserve),Voisins_InReserve)
-            # get true center of reserve: it is the node whose maximum distance from other nodes is smallest
-            max_dmin = maximum(dmin_in_reserve, dims = 2)
-            (radius, center) = findmin(max_dmin)
             center = findfirst(Reserve .== findfirst(r_val .== 1)) # center[1]
             radius = maximum(dmin_in_reserve[center,:])
             # add the commodities of nodes that are too far away from true center
@@ -268,13 +263,13 @@ function ReserveSiteSelection_SpatialConstraints(instance::Instance, gridgraph::
                             println("cb: node $k too far away")
                         end
                         push!(Commodities_to_add, k)
-                        break
+                        # break
                     end
                 end
             end 
         end
         
-        # add the lazy cuts for connectivity and size oif the reserve
+        # add the lazy cuts for connectivity and size of the reserve
         for k in Commodities_to_add
             # Ajout des contraintes de flux de la réserve
             for i in NoeudsProche[k]
