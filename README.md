@@ -1,4 +1,4 @@
-# reserve_spatial_constraints
+# rssp-compact-connected-gapfree
 This code solves a mixed-integer linear program that explicitly designs compact, connected and gap-free reserves within the reserve site selection problem.
 
 # Connected, compact and gap-free reserves
